@@ -1,0 +1,26 @@
+# .NET / Visual Studio
+bin/
+obj/
+.vs/
+*.user
+*.suo
+TestResults/
+artifacts/
+publish/
+
+# Generated media and temporary exports
+output/
+exports/
+temp/
+logs/
+*.tmp
+*.partial
+*.ffprobe.json
+
+# Local tool binaries (not committed)
+tools/ffmpeg/
+tools/ffprobe/
+
+# OS
+Thumbs.db
+.DS_Store
