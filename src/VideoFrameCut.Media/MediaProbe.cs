@@ -101,8 +101,13 @@ public sealed class MediaProbe
     {
         if (value is null) return null;
         var parts = value.Split('/');
-        if (parts.Length == 2 && ParseDouble(parts[0]) is { } numerator && ParseDouble(parts[1]) is > 0 and var denominator)
-            return numerator / denominator;
+        if (parts.Length == 2)
+        {
+            var numerator = ParseDouble(parts[0]);
+            var denominator = ParseDouble(parts[1]);
+            if (numerator is not null && denominator is > 0)
+                return numerator.Value / denominator.Value;
+        }
         return ParseDouble(value);
     }
 }

@@ -120,7 +120,19 @@ public sealed class ClipExporter
         if (withAudio) args.AddRange(new[] { "-map", "[a]", "-c:a", "aac", "-b:a", "192k" });
         else args.Add("-an");
 
-        args.AddRange(new[] { "-fps_mode:v", "passthrough", "-c:v", encoder });
+        // CFR requires an explicit output frame rate to give the final MP4 sample
+        // a nonzero duration. With VFR, passthrough preserves original PTS gaps.
+        var cfr = IsConstantRate(index, source.NominalFramesPerSecond);
+        if (cfr)
+        {
+            args.AddRange(new[] { "-r", source.NominalFramesPerSecond!.Value.ToString("0.########", fmt),
+                "-fps_mode:v", "cfr" });
+        }
+        else
+        {
+            args.AddRange(new[] { "-fps_mode:v", "passthrough", "-use_editlist", "0" });
+        }
+        args.AddRange(new[] { "-c:v", encoder });
         if (encoder == "h264_nvenc")
             args.AddRange(new[] { "-preset", "p5", "-rc:v", "vbr", "-cq:v", settings.Quality.ToString(fmt), "-b:v", "0" });
         else
@@ -128,6 +140,20 @@ public sealed class ClipExporter
         args.AddRange(new[] { "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-y", path });
 
         await FfProcess.CaptureAsync(FfmpegPath, args, cancellation);
+    }
+
+    private static bool IsConstantRate(DisplayFrameIndex index, double? nominalFps)
+    {
+        if (nominalFps is not > 0) return false;
+        if (index.FrameCount == 1) return true;
+        var expected = 1.0 / nominalFps.Value;
+        var tolerance = Math.Max(0.0012, expected * 0.025);
+        for (var i = 1; i < index.FrameCount; i++)
+        {
+            if (Math.Abs(index.BoundaryTime(i) - index.BoundaryTime(i - 1) - expected) > tolerance)
+                return false;
+        }
+        return true;
     }
 
     private static void Validate(DisplayFrameIndex index, IReadOnlyList<EditSegment> clips)
