@@ -30,7 +30,9 @@ jobs:
           if-no-files-found: error
 
   test-media:
-    runs-on: ubuntu-latest
+    # Pin a known FFmpeg toolchain for deterministic numbered-frame fixtures.
+    # FFmpeg 8 VFR compatibility is tracked separately, not declared passed here.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
