@@ -197,7 +197,7 @@ def main() -> None:
             "ffmpeg", "-nostdin", "-v", "error",
             "-i", str(source),
             "-vf", setpts,
-            "-frames:v", "16", "-fps_mode:v", "passthrough",
+            "-frames:v", "16", "-fps_mode:v", "vfr",
             "-c:v", "ffv1", "-pix_fmt", "yuv420p",
             "-y", str(vfr_source)
         )

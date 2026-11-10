@@ -131,7 +131,7 @@ public sealed class ClipExporter
         }
         else
         {
-            args.AddRange(new[] { "-fps_mode:v", "passthrough", "-use_editlist", "0" });
+            args.AddRange(new[] { "-fps_mode:v", "vfr", "-use_editlist", "0" });
         }
         args.AddRange(new[] { "-c:v", encoder });
         // Without an MP4 edit list, B-frame decoder reordering can shift the
