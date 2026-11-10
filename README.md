@@ -37,6 +37,7 @@ LosslessCut처럼 타임라인에서 원하는 위치를 나누고, 반디컷처
 | [내보내기·검증](docs/05_EXPORT_AND_VERIFICATION.md) | 인코딩/오디오/매니페스트/검증 전략 |
 | [개발 로드맵](docs/06_ROADMAP.md) | 구현 순서, 테스트, 릴리스 기준 |
 | [ADR-001 기술 선택](docs/ADR-001_TECH_STACK.md) | .NET/WPF/FFmpeg 결정 및 미확정 사항 |
+| [기존 편집기 비교](docs/07_REFERENCE_REVIEW.md) | LosslessCut·반디컷·Avidemux·Shotcut 분석 및 도입 우선순위 |
 
 원래 사용자 요구사항: `FrameCut_개발요구사항_정리.txt` (2026-11-11). 본 저장소 문서는 해당 내용과 후속 결정 **“원본 FPS 유지, 24fps 사전 변환 제외”**를 반영했습니다.
 
