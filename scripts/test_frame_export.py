@@ -186,7 +186,7 @@ def main() -> None:
         # its still-image durations as a VFR fixture.
         ffmpeg_banner = run("ffmpeg", "-version").decode(errors="replace").splitlines()[0]
         import re
-        match = re.search(r"ffmpeg version (?:n)?(\\d+)", ffmpeg_banner)
+        match = re.search(r"ffmpeg version (?:n)?(\d+)", ffmpeg_banner)
         ffmpeg_major = int(match.group(1)) if match else 0
         setpts = "setpts=expr='(N*0.04+floor(N/2)*0.08)/TB'"
         # FFmpeg 8 preserves CFR metadata through setpts by default; strip it
