@@ -8,6 +8,13 @@ public static class FfProcess
 {
     private static Process Create(string executable, IEnumerable<string> args)
     {
+        // A portable package can ship ffmpeg.exe and ffprobe.exe next to the app.
+        var localName = OperatingSystem.IsWindows() ? executable + ".exe" : executable;
+        if (!Path.IsPathRooted(executable) && !executable.Contains(Path.DirectorySeparatorChar))
+        {
+            var sibling = Path.Combine(AppContext.BaseDirectory, localName);
+            if (File.Exists(sibling)) executable = sibling;
+        }
         var info = new ProcessStartInfo(executable)
         {
             UseShellExecute = false,

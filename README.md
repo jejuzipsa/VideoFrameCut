@@ -2,7 +2,7 @@
 
 Windows용 **프레임 정확도 우선** 영상 분할·선택 추출 프로그램입니다.
 
-> 프로젝트 상태: **초기 설계 완료 / 구현 전**. 현재는 설계 문서만 있으며 실행 가능한 프로그램은 없습니다.
+> 프로젝트 상태: **실행 가능한 초기 구현 (기능 검증용)**. Windows WPF GUI/CLI 및 기본 FFmpeg 출력 엔진을 개발했습니다. 정식 배포/실사용 안정화 전입니다.
 
 ## 만드는 이유
 
@@ -38,9 +38,20 @@ LosslessCut처럼 타임라인에서 원하는 위치를 나누고, 반디컷처
 | [개발 로드맵](docs/06_ROADMAP.md) | 구현 순서, 테스트, 릴리스 기준 |
 | [ADR-001 기술 선택](docs/ADR-001_TECH_STACK.md) | .NET/WPF/FFmpeg 결정 및 미확정 사항 |
 | [기존 편집기 비교](docs/07_REFERENCE_REVIEW.md) | LosslessCut·반디컷·Avidemux·Shotcut 분석 및 도입 우선순위 |
+| [빌드·실행·검증](docs/08_TESTING.md) | Windows 미리보기, CLI, 자동 테스트 및 한계 |
 
 원래 사용자 요구사항: `FrameCut_개발요구사항_정리.txt` (2026-11-11). 본 저장소 문서는 해당 내용과 후속 결정 **“원본 FPS 유지, 24fps 사전 변환 제외”**를 반영했습니다.
 
-## 후속 작업
+## Windows GUI 테스트 빌드
 
-먼저 순수 프레임 구간 엔진과 테스트를 만들고, 다음으로 FFmpeg 프레임 분석 및 한 구간 출력 검증을 구현한 뒤 GUI를 연결합니다. 현재 단계에서 인코딩 동작이나 UI는 구현됐다고 주장하지 않습니다.
+**[GitHub Actions](https://github.com/jejuzipsa/VideoFrameCut/actions/workflows/build.yml)**에서 성공한 최신 실행을 선택한 뒤 **Artifacts → FrameCut-win-x64-preview**를 받으세요. 압축 해제 후 `VideoFrameCut.App.exe` 실행.
+
+**FFmpeg는 별도로 필요합니다.** `ffmpeg.exe`, `ffprobe.exe`를 실행파일과 같은 폴더에 두거나 시스템 PATH에 등록하세요. 패키지에 FFmpeg는 포함하지 않습니다. 더 자세한 사용 방법은 [빌드·실행·검증 문서](docs/08_TESTING.md) 참고.
+
+## 현재 구현 / 남은 작업
+
+- 구현: 원본 표시 프레임 인덱스, 비파괴 구간 편집, 수동/시간 분할, 출력 선택, Undo/Redo.
+- 구현: FFmpeg 전체 재인코딩 기반 컷, NVENC 우선·CPU 대체, 오디오 선택, 출력 재디코딩 확인/매니페스트.
+- 초기 GUI: Windows 미디어 재생(편의용) + FFmpeg 정확한 프레임 정지화면 + 구간 리스트 + MP4 출력.
+- 자동 검증: CFR/VFR, 키프레임 밖 H.264 컷, 유일한 원본 프레임 번호가 포함된 synthetic 테스트.
+- 미구현/추가 검증: 확대 타임라인·썸네일, 정확한 프레임별 실시간 재생, 복잡한 HDR/오디오, 실제 NVIDIA NVENC 성능 및 H3 연동 테스트.

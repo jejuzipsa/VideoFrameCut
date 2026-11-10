@@ -20,6 +20,14 @@ jobs:
         run: dotnet build src/VideoFrameCut.Cli/VideoFrameCut.Cli.csproj --configuration Release
       - name: Build Windows WPF app
         run: dotnet build src/VideoFrameCut.App/VideoFrameCut.App.csproj --configuration Release
+      - name: Publish Windows x64 preview (self-contained)
+        run: dotnet publish src/VideoFrameCut.App/VideoFrameCut.App.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false --output publish/win-x64
+      - name: Upload Windows preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: FrameCut-win-x64-preview
+          path: publish/win-x64/
+          if-no-files-found: error
 
   test-media:
     runs-on: ubuntu-latest

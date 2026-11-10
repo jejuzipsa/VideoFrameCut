@@ -67,6 +67,21 @@ def decode_frame_numbers(path: Path) -> list[int]:
     return decoded
 
 
+def frame_pts(path: Path) -> list[float]:
+    text = run(
+        "ffprobe", "-v", "error", "-select_streams", "v:0",
+        "-show_frames", "-show_entries", "frame=best_effort_timestamp_time",
+        "-of", "compact=p=0:nk=0", str(path)
+    ).decode()
+    result = []
+    for line in text.splitlines():
+        for field in line.split("|"):
+            if field.startswith("best_effort_timestamp_time="):
+                result.append(float(field.split("=", 1)[1]))
+                break
+    return result
+
+
 def assert_frames(path: Path, expected: list[int]) -> None:
     actual = decode_frame_numbers(path)
     assert actual == expected, (
@@ -133,8 +148,76 @@ def main() -> None:
         assert_frames(selection_dir / "source_002.mp4", list(range(48, 72)))
         assert not (selection_dir / "source_003.mp4").exists()
 
-    print("PASS CFR numbered-frame export: split 4 clips + non-keyframe extract + selected clips")
-    print("PASS frame identity: no missing, repeated or reordered source frames")
+        # Real H.264 GOP with B-frames; extract begins between keyframes.
+        # Includes audio to exercise the optional audio trim/transcode path.
+        h264_source = home / "h264_source.mp4"
+        run(
+            "ffmpeg", "-nostdin", "-v", "error",
+            "-framerate", str(FPS), "-start_number", "0",
+            "-i", str(pictures / "frame_%04d.ppm"),
+            "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=3.2",
+            "-map", "0:v:0", "-map", "1:a:0",
+            "-c:v", "libx264", "-g", "48", "-keyint_min", "48", "-bf", "2",
+            "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", "-y", str(h264_source)
+        )
+        assert_frames(h264_source, list(range(FRAME_COUNT)))
+        h264_out = home / "h264_out"
+        run(
+            "dotnet", "run", "--no-build", "--configuration", "Release",
+            "--project", str(CLI), "--", "extract", str(h264_source),
+            "--start-frame", "7", "--end-frame", "51",
+            "--out", str(h264_out), "--cpu"
+        )
+        result_h264 = h264_out / "h264_source_001.mp4"
+        assert_frames(result_h264, list(range(7, 51)))
+        audio_info = run(
+            "ffprobe", "-v", "error", "-select_streams", "a",
+            "-show_entries", "stream=codec_type", "-of", "csv=p=0",
+            str(result_h264)
+        ).decode().strip()
+        assert "audio" in audio_info, f"Audio was not retained: {audio_info}"
+
+        # Uneven 40/120 ms source-frame intervals: output must preserve
+        # original PTS differences, without frame drops or duplicates.
+        vfr_numbers = list(range(16))
+        concat_lines = []
+        for number in vfr_numbers:
+            frame_path = pictures / f"frame_{number:04}.ppm"
+            concat_lines.append(f"file '{frame_path}'")
+            concat_lines.append(f"duration {0.04 if number % 2 == 0 else 0.12}")
+        concat_path = home / "vfr_input.txt"
+        concat_path.write_text("\n".join(concat_lines) + "\n")
+        vfr_source = home / "vfr_source.mkv"
+        run(
+            "ffmpeg", "-nostdin", "-v", "error",
+            "-f", "concat", "-safe", "0", "-i", str(concat_path),
+            "-fps_mode:v", "passthrough", "-c:v", "ffv1",
+            "-pix_fmt", "yuv420p", "-y", str(vfr_source)
+        )
+        assert_frames(vfr_source, vfr_numbers)
+        vfr_out = home / "vfr_out"
+        run(
+            "dotnet", "run", "--no-build", "--configuration", "Release",
+            "--project", str(CLI), "--", "extract", str(vfr_source),
+            "--start-frame", "2", "--end-frame", "13",
+            "--out", str(vfr_out), "--cpu", "--no-audio"
+        )
+        vfr_result = vfr_out / "vfr_source_001.mp4"
+        assert_frames(vfr_result, list(range(2, 13)))
+        source_pts = frame_pts(vfr_source)[2:13]
+        output_pts = frame_pts(vfr_result)
+        assert len(source_pts) == len(output_pts)
+        for i, (original_pts, exported_pts) in enumerate(zip(source_pts, output_pts)):
+            difference = abs(
+                (original_pts - source_pts[0]) -
+                (exported_pts - output_pts[0])
+            )
+            assert difference < 0.004, f"VFR timestamp mismatch at frame {i}: {difference}"
+
+    print("PASS CFR: 4 segments, exact nonkeyframe extraction and selection")
+    print("PASS H.264 B-frames: nonkeyframe 44-frame output, original audio retained")
+    print("PASS VFR: source PTS spacing preserved, frame identity validated")
+    print("PASS unique frame identity: no missing, repeated or reordered source frames")
 
 
 if __name__ == "__main__":
