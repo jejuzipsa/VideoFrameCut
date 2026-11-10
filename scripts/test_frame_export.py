@@ -180,19 +180,17 @@ def main() -> None:
         # Uneven 40/120 ms source-frame intervals: output must preserve
         # original PTS differences, without frame drops or duplicates.
         vfr_numbers = list(range(16))
-        concat_lines = []
-        for number in vfr_numbers:
-            frame_path = pictures / f"frame_{number:04}.ppm"
-            concat_lines.append(f"file '{frame_path}'")
-            concat_lines.append(f"duration {0.04 if number % 2 == 0 else 0.12}")
-        concat_path = home / "vfr_input.txt"
-        concat_path.write_text("\n".join(concat_lines) + "\n")
         vfr_source = home / "vfr_source.mkv"
+        # Set irregular PTS directly on the 16 unique source frames. The concat
+        # demuxer can repeat still images on some FFmpeg versions, so do not use
+        # its still-image durations as a VFR fixture.
         run(
             "ffmpeg", "-nostdin", "-v", "error",
-            "-f", "concat", "-safe", "0", "-i", str(concat_path),
-            "-fps_mode:v", "passthrough", "-c:v", "ffv1",
-            "-pix_fmt", "yuv420p", "-y", str(vfr_source)
+            "-i", str(source),
+            "-vf", "setpts='(N*0.04+floor(N/2)*0.08)/TB'",
+            "-frames:v", "16", "-fps_mode:v", "passthrough",
+            "-c:v", "ffv1", "-pix_fmt", "yuv420p",
+            "-y", str(vfr_source)
         )
         assert_frames(vfr_source, vfr_numbers)
         vfr_out = home / "vfr_out"
