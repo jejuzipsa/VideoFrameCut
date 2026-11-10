@@ -18,6 +18,8 @@ jobs:
         run: dotnet run --configuration Release --project tests/VideoFrameCut.Core.Tests/VideoFrameCut.Core.Tests.csproj
       - name: Build CLI
         run: dotnet build src/VideoFrameCut.Cli/VideoFrameCut.Cli.csproj --configuration Release
+      - name: Build Windows WPF app
+        run: dotnet build src/VideoFrameCut.App/VideoFrameCut.App.csproj --configuration Release
 
   test-media:
     runs-on: ubuntu-latest
@@ -26,6 +28,8 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+      - name: Install FFmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y ffmpeg
       - name: FFmpeg version
         run: ffmpeg -version | head -n 1
       - name: Exercise FFmpeg export and verify numbered frames
