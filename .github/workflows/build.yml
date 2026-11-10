@@ -16,3 +16,17 @@ jobs:
           dotnet-version: '8.0.x'
       - name: Core tests
         run: dotnet run --configuration Release --project tests/VideoFrameCut.Core.Tests/VideoFrameCut.Core.Tests.csproj
+      - name: Build CLI
+        run: dotnet build src/VideoFrameCut.Cli/VideoFrameCut.Cli.csproj --configuration Release
+
+  test-media:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: FFmpeg version
+        run: ffmpeg -version | head -n 1
+      - name: Exercise FFmpeg export and verify numbered frames
+        run: python3 scripts/test_frame_export.py
