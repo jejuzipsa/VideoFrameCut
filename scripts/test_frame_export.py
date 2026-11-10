@@ -184,10 +184,19 @@ def main() -> None:
         # Set irregular PTS directly on the 16 unique source frames. The concat
         # demuxer can repeat still images on some FFmpeg versions, so do not use
         # its still-image durations as a VFR fixture.
+        ffmpeg_banner = run("ffmpeg", "-version").decode(errors="replace").splitlines()[0]
+        import re
+        match = re.search(r"ffmpeg version (?:n)?(\\d+)", ffmpeg_banner)
+        ffmpeg_major = int(match.group(1)) if match else 0
+        setpts = "setpts=expr='(N*0.04+floor(N/2)*0.08)/TB'"
+        # FFmpeg 8 preserves CFR metadata through setpts by default; strip it
+        # when assigning variable timestamps to avoid downstream duplication.
+        if ffmpeg_major >= 8:
+            setpts += ":strip_fps=1"
         run(
             "ffmpeg", "-nostdin", "-v", "error",
             "-i", str(source),
-            "-vf", "setpts='(N*0.04+floor(N/2)*0.08)/TB'",
+            "-vf", setpts,
             "-frames:v", "16", "-fps_mode:v", "passthrough",
             "-c:v", "ffv1", "-pix_fmt", "yuv420p",
             "-y", str(vfr_source)

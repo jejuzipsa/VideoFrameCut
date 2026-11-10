@@ -109,7 +109,9 @@ public sealed class ClipExporter
         var from = index.BoundaryTime(range.Start).ToString("R", fmt);
         var to = index.BoundaryTime(range.End).ToString("R", fmt);
         var withAudio = settings.KeepAudio && source.HasAudio;
-        var filter = $"[0:v:0]select='gte(n,{range.Start})*lt(n,{range.End})',setpts=PTS-STARTPTS[v]";
+        var cfr = IsConstantRate(index, source.NominalFramesPerSecond);
+        var stripFps = !cfr && await SupportsStripFpsAsync(cancellation) ? ":strip_fps=1" : "";
+        var filter = $"[0:v:0]select='gte(n,{range.Start})*lt(n,{range.End})',setpts=PTS-STARTPTS{stripFps}[v]";
         if (withAudio) filter += $";[0:a:0]atrim=start={from}:end={to},asetpts=PTS-STARTPTS[a]";
 
         var args = new List<string> {
@@ -122,7 +124,6 @@ public sealed class ClipExporter
 
         // CFR requires an explicit output frame rate to give the final MP4 sample
         // a nonzero duration. With VFR, passthrough preserves original PTS gaps.
-        var cfr = IsConstantRate(index, source.NominalFramesPerSecond);
         if (cfr)
         {
             args.AddRange(new[] { "-r", source.NominalFramesPerSecond!.Value.ToString("0.########", fmt),
@@ -144,6 +145,14 @@ public sealed class ClipExporter
         args.AddRange(new[] { "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-y", path });
 
         await FfProcess.CaptureAsync(FfmpegPath, args, cancellation);
+    }
+
+    private async Task<bool> SupportsStripFpsAsync(CancellationToken cancellation)
+    {
+        var version = await FfProcess.CaptureAsync(FfmpegPath, new[] { "-version" }, cancellation);
+        var match = System.Text.RegularExpressions.Regex.Match(version,
+            @"ffmpeg version (?:n)?(\d+)");
+        return match.Success && int.TryParse(match.Groups[1].Value, out var major) && major >= 8;
     }
 
     private static bool IsConstantRate(DisplayFrameIndex index, double? nominalFps)
