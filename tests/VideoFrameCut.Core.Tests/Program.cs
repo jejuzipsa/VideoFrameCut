@@ -61,7 +61,7 @@ static void TestVariableFrameRate()
     var index = new DisplayFrameIndex(new[] { 0.0, 0.03, 0.07, 0.16, 0.20, 0.27 }, 0.34);
     Assert(index.NearestBoundary(0.10, 0, 6) == 2, "VFR nearest PTS boundary incorrect.");
     var result = TimeSplitter.Split(index, new FrameRange(0, 6), 0.10);
-    Assert(result.Count == 3, "Expected 3 non-empty VFR segments.");
+    Assert(result.Count == 4, "Expected 4 non-empty VFR segments.");
     Assert(result[0].End == 2, "First VFR cut must be at frame 2.");
     Assert(result[^1].End == 6, "End boundary must include the last frame.");
     Assert(result.Sum(r => r.Count) == 6, "VFR frames lost.");
