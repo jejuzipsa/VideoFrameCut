@@ -1,0 +1,163 @@
+<Window x:Class="VideoFrameCut.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="FrameCut — 초기 개발 버전" Height="870" Width="1360"
+        MinHeight="680" MinWidth="1050"
+        WindowStartupLocation="CenterScreen"
+        Background="#151922" Foreground="#E9EDF4"
+        FontFamily="Segoe UI" FontSize="14"
+        PreviewKeyDown="Window_PreviewKeyDown" Closing="Window_Closing">
+    <Window.Resources>
+        <Style TargetType="{x:Type Button}">
+            <Setter Property="Background" Value="#34465B"/>
+            <Setter Property="Foreground" Value="#F2F5FA"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="14,8"/>
+            <Setter Property="Margin" Value="0,0,8,0"/>
+            <Setter Property="MinHeight" Value="34"/>
+        </Style>
+        <Style TargetType="{x:Type TextBlock}">
+            <Setter Property="Foreground" Value="#E9EDF4"/>
+        </Style>
+        <Style TargetType="{x:Type TextBox}">
+            <Setter Property="Background" Value="#242C3B"/>
+            <Setter Property="Foreground" Value="#E9EDF4"/>
+            <Setter Property="BorderBrush" Value="#455369"/>
+            <Setter Property="Padding" Value="6,6"/>
+        </Style>
+        <Style TargetType="{x:Type CheckBox}">
+            <Setter Property="Foreground" Value="#E9EDF4"/>
+        </Style>
+        <Style TargetType="{x:Type GroupBox}">
+            <Setter Property="BorderBrush" Value="#354356"/>
+            <Setter Property="Foreground" Value="#C9D8E9"/>
+            <Setter Property="Margin" Value="0,0,0,12"/>
+            <Setter Property="Padding" Value="10"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*" MinHeight="290"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="245"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <DockPanel Grid.Row="0" LastChildFill="True" Margin="0,0,0,12">
+            <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
+                <Button Content="영상 열기" Click="Open_Click"/>
+                <Button Content="재생 / 일시정지" Click="PlayPause_Click"/>
+                <Button Content="◀ 1프레임" Click="PreviousFrame_Click"/>
+                <Button Content="1프레임 ▶" Click="NextFrame_Click"/>
+                <Button Content="정확한 프레임 보기" Click="ExactFrame_Click"/>
+            </StackPanel>
+            <TextBlock x:Name="InfoText" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                       Margin="8,0,0,0" Foreground="#AFC1D5" Text="원본 영상 없음"/>
+        </DockPanel>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*"/>
+                <ColumnDefinition Width="1.25*"/>
+            </Grid.ColumnDefinitions>
+            <Border Grid.Column="0" CornerRadius="6" Background="#080B10" ClipToBounds="True" Margin="0,0,12,0">
+                <Grid>
+                    <MediaElement x:Name="VideoPreview" LoadedBehavior="Manual" UnloadedBehavior="Stop"
+                                  Stretch="Uniform" ScrubbingEnabled="True" MediaEnded="VideoPreview_MediaEnded"/>
+                    <Image x:Name="ExactStill" Stretch="Uniform" Visibility="Collapsed"/>
+                </Grid>
+            </Border>
+            <StackPanel Grid.Column="1">
+                <GroupBox Header="편집" >
+                    <StackPanel>
+                        <TextBlock Text="자동 분할 간격(초)" Margin="0,0,0,6"/>
+                        <DockPanel>
+                            <Button Content="시간으로 나누기" DockPanel.Dock="Right" Click="AutoSplit_Click"
+                                    Margin="8,0,0,0"/>
+                            <TextBox x:Name="SplitSecondsBox" Text="25" VerticalContentAlignment="Center"/>
+                        </DockPanel>
+                        <TextBlock Text="수동 컷은 현재 재생 헤드 위치에 적용" Margin="0,12,0,8"
+                                   TextWrapping="Wrap" Foreground="#AFC1D5"/>
+                        <WrapPanel>
+                            <Button Content="S : 나누기" Click="Split_Click"/>
+                            <Button Content="선택 삭제" Click="Delete_Click"/>
+                        </WrapPanel>
+                        <WrapPanel Margin="0,8,0,0">
+                            <Button Content="실행 취소" Click="Undo_Click"/>
+                            <Button Content="다시 실행" Click="Redo_Click"/>
+                        </WrapPanel>
+                    </StackPanel>
+                </GroupBox>
+                <GroupBox Header="출력 설정">
+                    <StackPanel>
+                        <CheckBox x:Name="AudioCheck" Content="원본 오디오 유지" IsChecked="True" Margin="0,0,0,8"/>
+                        <CheckBox x:Name="CpuCheck" Content="CPU 인코더 사용 (libx264)" Margin="0,0,0,8"/>
+                        <TextBlock Text="기본: NVENC 자동 시도 → 실패 시 CPU" TextWrapping="Wrap"
+                                   Foreground="#AFC1D5" Margin="0,0,0,8"/>
+                        <TextBlock Text="프레임 레이트는 원본 그대로 유지합니다."
+                                   TextWrapping="Wrap" Foreground="#AFC1D5"/>
+                    </StackPanel>
+                </GroupBox>
+            </StackPanel>
+        </Grid>
+
+        <Grid Grid.Row="2" Margin="0,12,0,10">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <DockPanel>
+                <TextBlock x:Name="FrameTimeText" DockPanel.Dock="Right" VerticalAlignment="Center"
+                           Text="00:00:00.000 / Frame 0" FontWeight="SemiBold"/>
+                <TextBlock Text="원본 프레임 타임라인" Foreground="#AFC1D5"/>
+            </DockPanel>
+            <Slider x:Name="SeekSlider" Grid.Row="1" Minimum="0" Maximum="1" Value="0"
+                    Margin="0,8,0,0" TickFrequency="1" IsSnapToTickEnabled="True"
+                    ValueChanged="SeekSlider_ValueChanged"/>
+        </Grid>
+
+        <GroupBox Grid.Row="3" Header="구간 목록 (Ctrl/Shift로 다중 선택, 체크 해제하면 출력 제외)">
+            <DataGrid x:Name="ClipGrid" AutoGenerateColumns="False" CanUserAddRows="False"
+                      SelectionMode="Extended" SelectionUnit="FullRow" IsReadOnly="False"
+                      HeadersVisibility="Column" GridLinesVisibility="None"
+                      Background="#242C3B" Foreground="#F3F5FA" RowBackground="#242C3B"
+                      AlternatingRowBackground="#2B3545" BorderThickness="0">
+                <DataGrid.Columns>
+                    <DataGridCheckBoxColumn Header="출력" Width="60"
+                        Binding="{Binding ExportEnabled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                    <DataGridTextColumn Header="#" Width="50" IsReadOnly="True"
+                        Binding="{Binding Number}"/>
+                    <DataGridTextColumn Header="시작 시간" Width="135" IsReadOnly="True"
+                        Binding="{Binding FromTime}"/>
+                    <DataGridTextColumn Header="끝 시간" Width="135" IsReadOnly="True"
+                        Binding="{Binding ToTime}"/>
+                    <DataGridTextColumn Header="원본 프레임 [시작, 끝)" Width="180" IsReadOnly="True"
+                        Binding="{Binding RangeText}"/>
+                    <DataGridTextColumn Header="프레임 수" Width="100" IsReadOnly="True"
+                        Binding="{Binding FrameCount}"/>
+                    <DataGridTextColumn Header="길이" Width="110" IsReadOnly="True"
+                        Binding="{Binding Duration}"/>
+                </DataGrid.Columns>
+            </DataGrid>
+        </GroupBox>
+
+        <Grid Grid.Row="4" Margin="0,8,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Button Grid.Column="0" x:Name="ExportButton" Content="체크한 구간 MP4 출력" Click="Export_Click"
+                    Background="#246D86" MinWidth="175" IsEnabled="False"/>
+            <StackPanel Grid.Column="1" Margin="12,0,12,0">
+                <TextBlock x:Name="StatusText" Text="영상 파일을 열어 주세요." TextTrimming="CharacterEllipsis"/>
+                <ProgressBar x:Name="ExportProgressBar" Height="7" Margin="0,8,0,0"
+                             Minimum="0" Maximum="100" Value="0"/>
+            </StackPanel>
+            <Button Grid.Column="2" x:Name="CancelButton" Content="작업 취소"
+                    Click="Cancel_Click" IsEnabled="False"/>
+        </Grid>
+    </Grid>
+</Window>
