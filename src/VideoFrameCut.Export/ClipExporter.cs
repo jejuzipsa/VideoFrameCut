@@ -133,6 +133,10 @@ public sealed class ClipExporter
             args.AddRange(new[] { "-fps_mode:v", "passthrough", "-use_editlist", "0" });
         }
         args.AddRange(new[] { "-c:v", encoder });
+        // Without an MP4 edit list, B-frame decoder reordering can shift the
+        // first VFR presentation timestamp away from zero. Disable B-frames on
+        // VFR output to keep the first displayed frame at PTS 0.
+        if (!cfr) args.AddRange(new[] { "-bf:v", "0" });
         if (encoder == "h264_nvenc")
             args.AddRange(new[] { "-preset", "p5", "-rc:v", "vbr", "-cq:v", settings.Quality.ToString(fmt), "-b:v", "0" });
         else
