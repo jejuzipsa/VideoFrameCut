@@ -8,9 +8,9 @@ Chrome 브라우저를 통하지 않고 기존에 클론한 Git 저장소에서 
 
     git pull origin main
 
-이후 portable/FrameCut-win-x64/VideoFrameCut.App.exe를 실행합니다. libvlc 폴더와 DLL, plugins는 지우거나 이동하지 마세요.
+이후 portable/FrameCut-win-x64/FrameCut.exe를 실행합니다. libvlc 폴더와 DLL, plugins는 지우거나 이동하지 마세요.
 
-별도 준비한 ffmpeg.exe 및 ffprobe.exe는 VideoFrameCut.App.exe 옆에 복사하거나 PATH에 등록해야 정확한 프레임 확인, 영상 분할 및 내보내기가 가능합니다. VLC 내장 재생에는 필요하지 않습니다.
+FFmpeg/FFprobe가 없으면 FrameCut 첫 실행 때 자동 다운로드와 SHA-256 검증을 거쳐 프로그램 폴더에 설치합니다. 설치 실패 시 별도 복사도 가능합니다.
 
 ## 다음 빌드
 

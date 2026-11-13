@@ -48,7 +48,7 @@ jobs:
           }
 
           foreach ($required in @(
-            'VideoFrameCut.App.exe',
+            'FrameCut.exe',
             'libvlc/win-x64/libvlc.dll',
             'libvlc/win-x64/libvlccore.dll',
             'libvlc/win-x64/plugins/codec/libavcodec_plugin.dll'
@@ -68,16 +68,16 @@ jobs:
           $totalMB = [math]::Round((($files | Measure-Object Length -Sum).Sum / 1MB), 1)
           Write-Host "Portable files: $($files.Count), total: $totalMB MiB"
 
-          $exeHash = (Get-FileHash -Algorithm SHA256 -Path (Join-Path $target 'VideoFrameCut.App.exe')).Hash
+          $exeHash = (Get-FileHash -Algorithm SHA256 -Path (Join-Path $target 'FrameCut.exe')).Hash
           $sourceSha = (git rev-parse --short=12 HEAD).Trim()
           @(
             'FrameCut Windows x64 portable build',
             "Source commit: $sourceSha",
             "Built UTC: $((Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'))",
-            "VideoFrameCut.App.exe SHA256: $exeHash",
+            "FrameCut.exe SHA256: $exeHash",
             '',
             'Keep the libvlc directory with the EXE.',
-            'Add ffmpeg.exe and ffprobe.exe beside VideoFrameCut.App.exe.',
+            'Add ffmpeg.exe and ffprobe.exe beside FrameCut.exe.',
             'FFmpeg executables are not bundled here.',
             'Unsigned software: scan the directory using Windows Security before execution.'
           ) | Set-Content -Path (Join-Path $target 'BUILD_INFO.txt') -Encoding utf8

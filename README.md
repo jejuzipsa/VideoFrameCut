@@ -42,11 +42,19 @@ LosslessCut처럼 타임라인에서 원하는 위치를 나누고, 반디컷처
 
 원래 사용자 요구사항: `FrameCut_개발요구사항_정리.txt` (2026-11-11). 본 저장소 문서는 해당 내용과 후속 결정 **“원본 FPS 유지, 24fps 사전 변환 제외”**를 반영했습니다.
 
+## 포터블 설치 파일 (Windows 11 x64)
+
+**추천 배포 방법:** GitHub Actions → Build FrameCut portable installer EXE → Artifacts → FrameCut-Portable-Installer-win-x64. 설치 EXE를 실행하면 원하는 폴더를 선택하여 FrameCut.exe와 모든 LibVLC/.NET 파일을 압축 해제하고, 마지막 단계에서 FrameCut을 실행할 수 있습니다.
+
+첫 실행 때 **ffmpeg.exe와 ffprobe.exe가 없다면 자동으로 설치**합니다. 공급처 Gyan의 Essentials ZIP과 공식 SHA-256을 HTTPS로 받아 검증하고, 두 파일만 프로그램 폴더에 저장합니다. 이미 설치되어 있으면 건너뜁니다. 취소·재시도·진행률 표시를 지원합니다. 네트워크가 불가능할 때에는 FFmpeg/FFprobe를 직접 복사할 수도 있습니다.
+
+설치 프로그램은 관리자 권한을 요구하지 않고 파일 연결/시스템 PATH/제거 등록을 변경하지 않는 포터블 압축 해제 방식입니다. 다만 코드 서명은 아직 없으므로 설치 EXE를 Windows 보안으로 검사하고 사용하세요. 자세한 내용은 [설치 프로그램 안내](installer/README.md)를 참고하세요.
+
 ## Windows GUI 테스트 빌드
 
-**[GitHub Actions](https://github.com/jejuzipsa/VideoFrameCut/actions/workflows/build.yml)**에서 성공한 최신 실행을 선택한 뒤 **Artifacts → FrameCut-win-x64-preview**를 받으세요. 압축 해제 후 `VideoFrameCut.App.exe` 실행.
+**[GitHub Actions](https://github.com/jejuzipsa/VideoFrameCut/actions/workflows/build.yml)**에서 성공한 최신 실행을 선택한 뒤 **Artifacts → FrameCut-win-x64-preview**를 받으세요. 압축 해제 후 `FrameCut.exe` 실행.
 
-**FFmpeg는 별도로 필요합니다.** `ffmpeg.exe`, `ffprobe.exe`를 실행파일과 같은 폴더에 두거나 시스템 PATH에 등록하세요. 패키지에 FFmpeg는 포함하지 않습니다. 더 자세한 사용 방법은 [빌드·실행·검증 문서](docs/08_TESTING.md) 참고.
+**FFmpeg는 실행 파일 첫 실행 때 필요하면 자동으로 설치합니다.** FFmpeg ZIP은 설치파일에 포함하지 않으며, 파일이 없으면 Gyan Essentials ZIP과 공식 SHA-256을 받아 검증합니다. 더 자세한 사용 방법은 [빌드·실행·검증 문서](docs/08_TESTING.md) 참고.
 
 ### 필름·가위 프로그램 아이콘
 
