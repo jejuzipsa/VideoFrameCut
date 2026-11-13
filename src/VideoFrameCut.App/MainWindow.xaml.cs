@@ -511,8 +511,54 @@ public partial class MainWindow : Window
     private void PlayPause_Click(object sender, RoutedEventArgs e)
     {
         if (_source is null) return;
-        if (_playing) PausePlayback();
+        if (_playing)
+        {
+            PausePlayback();
+            StatusText.Text = "일시정지. ▶ 버튼 또는 Space로 이어서 재생할 수 있습니다.";
+        }
         else StartPlayback();
+    }
+
+    private void BackSeconds_Click(object sender, RoutedEventArgs e) => SeekBySeconds(-3.0);
+    private void ForwardSeconds_Click(object sender, RoutedEventArgs e) => SeekBySeconds(3.0);
+
+    private void SeekBySeconds(double seconds)
+    {
+        if (_index is null) return;
+        var frame = FrameNavigation.BySeconds(
+            _index, (int)Math.Round(SeekSlider.Value), seconds, _clipBounds?.Range);
+        SeekToFrame(frame);
+        StatusText.Text = $"{(seconds < 0 ? "뒤로" : "앞으로")} 3초 이동 · 원본 프레임 {frame:N0}";
+    }
+
+    private void PreviousClip_Click(object sender, RoutedEventArgs e) => NavigateClip(-1);
+    private void NextClip_Click(object sender, RoutedEventArgs e) => NavigateClip(+1);
+
+    private void NavigateClip(int direction)
+    {
+        if (_editor is null || _editor.Segments.Count == 0) return;
+        var segments = _editor.Segments;
+        var current = _selectedClipId.HasValue
+            ? Array.FindIndex(segments.ToArray(), s => s.Id == _selectedClipId.Value)
+            : -1;
+        if (current < 0)
+        {
+            var frame = (int)Math.Round(SeekSlider.Value);
+            current = Array.FindIndex(segments.ToArray(), s =>
+                s.SourceRange.Start <= frame && frame < s.SourceRange.End);
+            if (current < 0) current = direction > 0 ? -1 : segments.Count;
+        }
+        var targetIndex = Math.Clamp(current + direction, 0, segments.Count - 1);
+        var targetId = segments[targetIndex].Id;
+        var row = _rows.FirstOrDefault(item => item.Id == targetId);
+        if (row is null) return;
+
+        _suppressClipSelection = true;
+        ClipGrid.SelectedItem = row;
+        _suppressClipSelection = false;
+        ClipGrid.ScrollIntoView(row);
+        SelectClip(row);
+        StartPlayback(restart: true);
     }
 
     private void StartPlayback(bool restart = false)
@@ -525,7 +571,9 @@ public partial class MainWindow : Window
                 position >= bounds.EndSeconds - 0.005)
                 SeekToFrame(bounds.FirstFrame);
         }
-        else if (restart)
+        else if (restart || _clipEnded ||
+                 (VideoPreview.NaturalDuration.HasTimeSpan &&
+                  VideoPreview.Position >= VideoPreview.NaturalDuration.TimeSpan))
         {
             SeekToFrame(0);
         }
@@ -534,6 +582,7 @@ public partial class MainWindow : Window
         _clipEnded = false;
         VideoPreview.Play();
         _playing = true;
+        UpdateTransportButton();
         _playTimer.Start();
         StatusText.Text = _clipBounds is null ? "원본 전체 재생 중" : "선택 구간만 재생 중";
     }
@@ -543,6 +592,17 @@ public partial class MainWindow : Window
         _playTimer.Stop();
         _playing = false;
         VideoPreview.Pause();
+        UpdateTransportButton();
+    }
+
+    private void UpdateTransportButton()
+    {
+        if (TransportPlayPauseButton is null) return;
+        TransportPlayPauseButton.Content = _playing ? "Ⅱ" : "▶";
+        TransportPlayPauseButton.ToolTip = _playing ? "일시정지 (Space)" : "재생 (Space)";
+        TransportPlayPauseButton.Background = new System.Windows.Media.SolidColorBrush(
+            _playing ? System.Windows.Media.Color.FromRgb(120, 59, 67)
+                     : System.Windows.Media.Color.FromRgb(35, 117, 141));
     }
 
     private void PlaybackTimer_Tick(object? sender, EventArgs e)
@@ -660,6 +720,15 @@ public partial class MainWindow : Window
         ExportButton.IsEnabled = _editor?.ExportSelection().Count > 0 &&
             _exportCancel is null && _loadCancel is null;
         CancelButton.IsEnabled = _loadCancel is not null || _exportCancel is not null;
+        var loaded = _index is not null;
+        PreviousClipButton.IsEnabled = loaded && _editor?.Segments.Count > 0;
+        NextClipButton.IsEnabled = loaded && _editor?.Segments.Count > 0;
+        BackSecondsButton.IsEnabled = loaded;
+        ForwardSecondsButton.IsEnabled = loaded;
+        BackFrameButton.IsEnabled = loaded;
+        ForwardFrameButton.IsEnabled = loaded;
+        TransportPlayPauseButton.IsEnabled = loaded;
+        UpdateTransportButton();
     }
 
     private void Cancel_Click(object sender, RoutedEventArgs e)
@@ -673,8 +742,12 @@ public partial class MainWindow : Window
     private void VideoPreview_MediaOpened(object sender, RoutedEventArgs e)
     {
         if (_index is null) return;
-        VideoPreview.Pause();
         SeekMediaToFrame((int)Math.Round(SeekSlider.Value));
+        // MediaOpened may arrive AFTER the user pressed Play. Never force a
+        // pause over an active playback request.
+        if (_playing) VideoPreview.Play();
+        else VideoPreview.Pause();
+        UpdateTransportButton();
     }
 
     private void VideoPreview_MediaFailed(object sender, ExceptionRoutedEventArgs e)
@@ -688,10 +761,14 @@ public partial class MainWindow : Window
         PausePlayback();
         if (_clipBounds is not null)
         {
-            _clipEnded = true;
             SeekToFrame(_clipBounds.LastFrame);
-            _clipEnded = true;
+            StatusText.Text = "선택 구간 끝. ▶를 누르면 구간 처음부터 다시 재생합니다.";
         }
+        else
+        {
+            StatusText.Text = "원본 재생 완료. ▶를 누르면 처음부터 다시 재생합니다.";
+        }
+        _clipEnded = true;
     }
 
     private async void Window_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -705,8 +782,12 @@ public partial class MainWindow : Window
             RemoveSource_Click(sender, e);
         else if (!control && e.Key == Key.Delete) Delete_Click(sender, e);
         else if (!control && e.Key == Key.Space) PlayPause_Click(sender, e);
-        else if (!control && e.Key == Key.Left) await StepAsync(-1);
-        else if (!control && e.Key == Key.Right) await StepAsync(+1);
+        else if (e.Key == Key.Left && (control || Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)))
+            await StepAsync(-1);
+        else if (e.Key == Key.Right && (control || Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)))
+            await StepAsync(+1);
+        else if (!control && e.Key == Key.Left) SeekBySeconds(-3);
+        else if (!control && e.Key == Key.Right) SeekBySeconds(3);
         else return;
         e.Handled = true;
     }
