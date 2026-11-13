@@ -10,7 +10,8 @@
         FontFamily="Segoe UI" FontSize="14"
         AllowDrop="True"
         PreviewDragOver="Window_PreviewDragOver" PreviewDrop="Window_PreviewDrop"
-        PreviewKeyDown="Window_PreviewKeyDown" Closing="Window_Closing">
+        PreviewKeyDown="Window_PreviewKeyDown" Loaded="Window_Loaded"
+        Closing="Window_Closing">
     <Window.Resources>
         <Style x:Key="TransportButtonStyle" TargetType="{x:Type Button}"
                BasedOn="{StaticResource {x:Type Button}}">
@@ -36,10 +37,13 @@
 
         <DockPanel Grid.Row="0" LastChildFill="True" Margin="0,0,0,12">
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
-                <Button Content="영상 추가" Click="Open_Click"/>
+                <Button x:Name="AddVideoButton" Content="영상 추가" Click="Open_Click"/>
                 <Button Content="원본 전체 보기" Click="FullSource_Click"/>
                 <Button Content="선택 구간 재생" Click="PlaySelected_Click"/>
                 <Button Content="정확한 프레임 보기" Click="ExactFrame_Click"/>
+                <Button x:Name="FFmpegInstallButton" Content="FFmpeg 확인 / 설치"
+                        ToolTip="최초 실행 시 자동 설치. 필요하면 다시 검사하거나 재시도합니다."
+                        Click="FFmpegInstall_Click"/>
             </StackPanel>
             <TextBlock x:Name="InfoText" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                        Margin="8,0,0,0" Foreground="#AFC1D5" Text="원본 영상 없음"/>

@@ -51,6 +51,7 @@ public partial class MainWindow : Window
     };
 
     private readonly MediaProbe _probe = new();
+    private readonly FFmpegBootstrapper _ffmpegBootstrapper = new();
     private readonly ClipExporter _exporter = new();
     private readonly PreviewFrameService _framePreview = new();
     private readonly ObservableCollection<SourceVideoRow> _sources = new();
@@ -66,6 +67,8 @@ public partial class MainWindow : Window
     private CancellationTokenSource? _loadCancel;
     private CancellationTokenSource? _exportCancel;
     private CancellationTokenSource? _previewCancel;
+    private CancellationTokenSource? _ffmpegInstallCancel;
+    private bool _ffmpegReady;
     // LibVLC owns decoding, video rendering and audio playback.
     // FFmpeg remains the sole authoritative frame-index/cut/export engine.
     private LibVLC? _libVlc;
@@ -94,6 +97,79 @@ public partial class MainWindow : Window
     }
 
     private static bool IsVideoFile(string path) => VideoExtensions.Contains(Path.GetExtension(path));
+
+    private async void Window_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (FFmpegBootstrapper.HasTools())
+        {
+            _ffmpegReady = true;
+            StatusText.Text = "FFmpeg / FFprobe 확인 완료 · 원본 영상을 추가할 수 있습니다.";
+            UpdateControls();
+            return;
+        }
+
+        // No global PATH or administrative install. Download both tools into
+        // the selected portable application folder only on first launch.
+        await EnsureFFmpegAsync();
+    }
+
+    private async void FFmpegInstall_Click(object sender, RoutedEventArgs e) =>
+        await EnsureFFmpegAsync();
+
+    private async Task EnsureFFmpegAsync()
+    {
+        if (_ffmpegInstallCancel is not null) return;
+        if (FFmpegBootstrapper.HasTools())
+        {
+            _ffmpegReady = true;
+            StatusText.Text = "FFmpeg / FFprobe가 이미 설치되어 있습니다. 다시 다운로드하지 않습니다.";
+            UpdateControls();
+            return;
+        }
+
+        var cancel = new CancellationTokenSource();
+        _ffmpegInstallCancel = cancel;
+        _ffmpegReady = false;
+        ExportProgressBar.Value = 0;
+        StatusText.Text = "최초 실행: FFmpeg·FFprobe 자동 설치를 준비합니다...";
+        UpdateControls();
+        var progress = new Progress<(double Fraction, string Message)>(p =>
+        {
+            if (cancel.IsCancellationRequested) return;
+            ExportProgressBar.Value = p.Fraction * 100;
+            StatusText.Text = p.Message;
+        });
+
+        try
+        {
+            await Task.Run(() => _ffmpegBootstrapper.EnsureAsync(
+                AppContext.BaseDirectory, progress, cancel.Token));
+            _ffmpegReady = FFmpegBootstrapper.HasTools();
+            if (!_ffmpegReady)
+                throw new InvalidOperationException("설치 후에도 FFmpeg 실행 파일을 확인하지 못했습니다.");
+            ExportProgressBar.Value = 100;
+            StatusText.Text = "FFmpeg·FFprobe 준비 완료. 영상 편집을 시작할 수 있습니다.";
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText.Text = "FFmpeg 자동 설치를 취소했습니다. 오른쪽 'FFmpeg 설치'로 다시 시도할 수 있습니다.";
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = "FFmpeg 자동 설치 실패. 'FFmpeg 설치' 버튼으로 재시도하세요.";
+            MessageBox.Show(this,
+                "FFmpeg 자동 설치에 실패했습니다. 네트워크 또는 설치 폴더의 쓰기 권한을 확인하세요." +
+                Environment.NewLine + Environment.NewLine + ex.Message,
+                "FrameCut · FFmpeg 설치 실패",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        finally
+        {
+            _ffmpegInstallCancel = null;
+            cancel.Dispose();
+            UpdateControls();
+        }
+    }
 
     private async void Open_Click(object sender, RoutedEventArgs e)
     {
@@ -124,6 +200,16 @@ public partial class MainWindow : Window
 
     private async Task ImportVideosAsync(IEnumerable<string> files)
     {
+        if (_ffmpegInstallCancel is not null)
+        {
+            StatusText.Text = "FFmpeg 자동 설치 중입니다. 완료 후 영상을 추가하세요.";
+            return;
+        }
+        if (!_ffmpegReady)
+        {
+            await EnsureFFmpegAsync();
+            if (!_ffmpegReady) return;
+        }
         if (_loadCancel is not null || _exportCancel is not null)
         {
             StatusText.Text = "다른 영상 분석 또는 출력 작업이 진행 중입니다.";
@@ -895,9 +981,16 @@ public partial class MainWindow : Window
     private void UpdateControls()
     {
         if (ExportButton is null || CancelButton is null) return;
-        ExportButton.IsEnabled = _editor?.ExportSelection().Count > 0 &&
-            _exportCancel is null && _loadCancel is null;
-        CancelButton.IsEnabled = _loadCancel is not null || _exportCancel is not null;
+        ExportButton.IsEnabled = _ffmpegReady &&
+            _editor?.ExportSelection().Count > 0 &&
+            _exportCancel is null && _loadCancel is null &&
+            _ffmpegInstallCancel is null;
+        CancelButton.IsEnabled = _loadCancel is not null || _exportCancel is not null ||
+            _ffmpegInstallCancel is not null;
+        FFmpegInstallButton.IsEnabled = _ffmpegInstallCancel is null;
+        FFmpegInstallButton.Content = _ffmpegInstallCancel is null
+            ? "FFmpeg 확인 / 설치" : "FFmpeg 설치 중...";
+        AddVideoButton.IsEnabled = _ffmpegInstallCancel is null;
         var loaded = _index is not null;
         PreviousClipButton.IsEnabled = loaded && _editor?.Segments.Count > 0;
         NextClipButton.IsEnabled = loaded && _editor?.Segments.Count > 0;
@@ -923,6 +1016,7 @@ public partial class MainWindow : Window
         _exportCancel?.Cancel();
         _loadCancel?.Cancel();
         _previewCancel?.Cancel();
+        _ffmpegInstallCancel?.Cancel();
         StatusText.Text = "작업 취소 요청됨";
     }
 
@@ -979,6 +1073,7 @@ public partial class MainWindow : Window
         _loadCancel?.Cancel();
         _exportCancel?.Cancel();
         _previewCancel?.Cancel();
+        _ffmpegInstallCancel?.Cancel();
         _playTimer.Stop();
         if (_vlcPlayer is not null)
         {
