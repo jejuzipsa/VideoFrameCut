@@ -783,9 +783,19 @@ public partial class MainWindow : Window
         else if (!control && e.Key == Key.Delete) Delete_Click(sender, e);
         else if (!control && e.Key == Key.Space) PlayPause_Click(sender, e);
         else if (e.Key == Key.Left && (control || Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)))
+        {
+            // Mark handled BEFORE awaiting FFmpeg, so the focused WPF Slider
+            // does not also apply its own Left/Right keyboard movement.
+            e.Handled = true;
             await StepAsync(-1);
+            return;
+        }
         else if (e.Key == Key.Right && (control || Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)))
+        {
+            e.Handled = true;
             await StepAsync(+1);
+            return;
+        }
         else if (!control && e.Key == Key.Left) SeekBySeconds(-3);
         else if (!control && e.Key == Key.Right) SeekBySeconds(3);
         else return;
