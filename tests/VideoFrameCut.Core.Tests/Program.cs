@@ -11,6 +11,8 @@ var cases = new (string Name, Action Test)[]
     ("CFR 24/30/60 exact boundaries", TestConstantFrameRates),
     ("clip-only preview uses exclusive end frame", TestClipPlaybackBounds),
     ("clip preview times use relative source PTS", TestClipPlaybackVfrOffset),
+    ("three-second navigation respects source frames", TestSecondsNavigation),
+    ("three-second navigation stays within selected clip", TestBoundedSecondsNavigation),
 };
 var failed = 0;
 foreach (var test in cases)
@@ -145,4 +147,25 @@ static void TestClipPlaybackVfrOffset()
     Assert(Math.Abs(clip.StartSeconds - .04) < 1e-8, "Source PTS offset not removed.");
     Assert(Math.Abs(clip.EndSeconds - .30) < 1e-8, "Exclusive end for VFR must use next frame PTS.");
     Assert(clip.LastFrame == 3, "Last VFR frame incorrect.");
+}
+
+static void TestSecondsNavigation()
+{
+    var index = DisplayFrameIndex.FromConstantFrameRate(900, 30);
+    Assert(FrameNavigation.BySeconds(index, 300, 3) == 390, "3 sec forward at 30 fps = 90 frames.");
+    Assert(FrameNavigation.BySeconds(index, 300, -3) == 210, "3 sec backward at 30 fps = 90 frames.");
+    Assert(FrameNavigation.BySeconds(index, 0, -3) == 0, "Must clamp to first frame.");
+    Assert(FrameNavigation.BySeconds(index, 899, 3) == 899, "Must clamp to last frame.");
+}
+
+static void TestBoundedSecondsNavigation()
+{
+    var index = DisplayFrameIndex.FromConstantFrameRate(600, 30);
+    var region = new FrameRange(180, 270);
+    Assert(FrameNavigation.BySeconds(index, 200, -3, region) == 180, "Seek must stop at clip start.");
+    Assert(FrameNavigation.BySeconds(index, 255, 3, region) == 269, "Seek must stop at last clip frame.");
+    var vfr = new DisplayFrameIndex(new[] { 10.0, 10.1, 10.6, 12.0, 13.2, 17.0 }, 18);
+    Assert(FrameNavigation.BySeconds(vfr, 1, 2.0) == 3, "Use PTS nearest boundary, not average FPS.");
+    Assert(FrameNavigation.BySeconds(vfr, 1, 2.0, new FrameRange(1, 3)) == 2,
+        "VFR seek must not cross exclusive end.");
 }

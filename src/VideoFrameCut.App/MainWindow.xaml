@@ -30,6 +30,17 @@
         <Style TargetType="{x:Type CheckBox}">
             <Setter Property="Foreground" Value="#E9EDF4"/>
         </Style>
+        <Style x:Key="TransportButtonStyle" TargetType="{x:Type Button}"
+               BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="FontFamily" Value="Segoe UI Symbol"/>
+            <Setter Property="FontSize" Value="17"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="MinWidth" Value="52"/>
+            <Setter Property="MinHeight" Value="42"/>
+            <Setter Property="Margin" Value="3,0"/>
+            <Setter Property="Padding" Value="9,5"/>
+            <Setter Property="Background" Value="#29394B"/>
+        </Style>
         <Style TargetType="{x:Type GroupBox}">
             <Setter Property="BorderBrush" Value="#354356"/>
             <Setter Property="Foreground" Value="#C9D8E9"/>
@@ -52,9 +63,6 @@
                 <Button Content="영상 추가" Click="Open_Click"/>
                 <Button Content="원본 전체 보기" Click="FullSource_Click"/>
                 <Button Content="선택 구간 재생" Click="PlaySelected_Click"/>
-                <Button Content="재생 / 일시정지" Click="PlayPause_Click"/>
-                <Button Content="◀ 1프레임" Click="PreviousFrame_Click"/>
-                <Button Content="1프레임 ▶" Click="NextFrame_Click"/>
                 <Button Content="정확한 프레임 보기" Click="ExactFrame_Click"/>
             </StackPanel>
             <TextBlock x:Name="InfoText" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
@@ -91,15 +99,40 @@
                     </ListBox>
                 </DockPanel>
             </GroupBox>
-            <Border Grid.Column="1" CornerRadius="6" Background="#080B10" ClipToBounds="True" Margin="0,0,12,0">
-                <Grid>
-                    <MediaElement x:Name="VideoPreview" LoadedBehavior="Manual" UnloadedBehavior="Stop"
-                                  Stretch="Uniform" ScrubbingEnabled="True" MediaOpened="VideoPreview_MediaOpened"
-                                  MediaFailed="VideoPreview_MediaFailed"
-                                  MediaEnded="VideoPreview_MediaEnded"/>
-                    <Image x:Name="ExactStill" Stretch="Uniform" Visibility="Collapsed"/>
-                </Grid>
-            </Border>
+            <Grid Grid.Column="1" Margin="0,0,12,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" MinHeight="100"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Border Grid.Row="0" CornerRadius="6" Background="#080B10" ClipToBounds="True">
+                    <Grid>
+                        <MediaElement x:Name="VideoPreview" LoadedBehavior="Manual" UnloadedBehavior="Stop"
+                                      Stretch="Uniform" ScrubbingEnabled="True" MediaOpened="VideoPreview_MediaOpened"
+                                      MediaFailed="VideoPreview_MediaFailed"
+                                      MediaEnded="VideoPreview_MediaEnded"/>
+                        <Image x:Name="ExactStill" Stretch="Uniform" Visibility="Collapsed"/>
+                    </Grid>
+                </Border>
+                <Border Grid.Row="1" Background="#202A38" CornerRadius="6" Margin="0,8,0,0" Padding="5,8">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <Button x:Name="PreviousClipButton" Content="⏮" Style="{StaticResource TransportButtonStyle}"
+                                ToolTip="이전 분할 구간 재생" Click="PreviousClip_Click"/>
+                        <Button x:Name="BackSecondsButton" Content="« 3초" Style="{StaticResource TransportButtonStyle}"
+                                ToolTip="3초 뒤로 (←)" Click="BackSeconds_Click"/>
+                        <Button x:Name="BackFrameButton" Content="‹ 1F" Style="{StaticResource TransportButtonStyle}"
+                                ToolTip="1프레임 뒤로 (Ctrl+← 또는 Shift+←)" Click="PreviousFrame_Click"/>
+                        <Button x:Name="TransportPlayPauseButton" Content="▶" ToolTip="재생 (Space)"
+                                Style="{StaticResource TransportButtonStyle}" MinWidth="60"
+                                Background="#23758D" Click="PlayPause_Click"/>
+                        <Button x:Name="ForwardFrameButton" Content="1F ›" Style="{StaticResource TransportButtonStyle}"
+                                ToolTip="1프레임 앞으로 (Ctrl+→ 또는 Shift+→)" Click="NextFrame_Click"/>
+                        <Button x:Name="ForwardSecondsButton" Content="3초 »" Style="{StaticResource TransportButtonStyle}"
+                                ToolTip="3초 앞으로 (→)" Click="ForwardSeconds_Click"/>
+                        <Button x:Name="NextClipButton" Content="⏭" Style="{StaticResource TransportButtonStyle}"
+                                ToolTip="다음 분할 구간 재생" Click="NextClip_Click"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
             <StackPanel Grid.Column="2">
                 <GroupBox Header="편집">
                     <StackPanel>
@@ -153,7 +186,8 @@
             </DockPanel>
             <Slider x:Name="SeekSlider" Grid.Row="1" Minimum="0" Maximum="1" Value="0"
                     Margin="0,8,0,0" TickFrequency="1" IsSnapToTickEnabled="True"
-                    ValueChanged="SeekSlider_ValueChanged"/>
+                    IsMoveToPointEnabled="True" AutoToolTipPlacement="BottomRight"
+                    AutoToolTipPrecision="0" ValueChanged="SeekSlider_ValueChanged"/>
         </Grid>
 
         <GroupBox Grid.Row="3" Header="② 분할 구간 목록 (한 번 클릭: 구간 선택 / 더블클릭: 해당 구간만 재생)">
