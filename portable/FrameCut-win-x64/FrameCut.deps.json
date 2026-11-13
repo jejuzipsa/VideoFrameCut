@@ -7,7 +7,7 @@
   "targets": {
     ".NETCoreApp,Version=v8.0": {},
     ".NETCoreApp,Version=v8.0/win-x64": {
-      "VideoFrameCut.App/1.0.0": {
+      "FrameCut/1.0.0": {
         "dependencies": {
           "LibVLCSharp.WPF": "3.10.2",
           "VideoFrameCut.Core": "1.0.0",
@@ -17,7 +17,7 @@
           "runtimepack.Microsoft.WindowsDesktop.App.Runtime.win-x64": "8.0.33"
         },
         "runtime": {
-          "VideoFrameCut.App.dll": {}
+          "FrameCut.dll": {}
         }
       },
       "runtimepack.Microsoft.NETCore.App.Runtime.win-x64/8.0.33": {
@@ -1018,7 +1018,7 @@
     }
   },
   "libraries": {
-    "VideoFrameCut.App/1.0.0": {
+    "FrameCut/1.0.0": {
       "type": "project",
       "serviceable": false,
       "sha512": ""
