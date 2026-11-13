@@ -1,0 +1,9 @@
+FrameCut Windows x64 portable build
+Source commit: 46f64421c4c1
+Built UTC: 2026-11-13T16:32:28Z
+VideoFrameCut.App.exe SHA256: BB3CB5B6E7FC63250416121735EDFF09F9FA8EC8C044CACBA65A08859C572A92
+
+Keep the libvlc directory with the EXE.
+Add ffmpeg.exe and ffprobe.exe beside VideoFrameCut.App.exe.
+FFmpeg executables are not bundled here.
+Unsigned software: scan the directory using Windows Security before execution.
