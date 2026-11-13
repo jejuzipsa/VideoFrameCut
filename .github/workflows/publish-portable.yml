@@ -1,0 +1,104 @@
+name: Publish FrameCut portable folder into Git
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-portable.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: framecut-portable-main
+  cancel-in-progress: false
+
+jobs:
+  publish-portable:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Verify editing engine
+        run: dotnet run --configuration Release --project tests/VideoFrameCut.Core.Tests/VideoFrameCut.Core.Tests.csproj
+
+      - name: Publish self-contained Windows x64 program into tracked folder
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $target = 'portable/FrameCut-win-x64'
+          if (Test-Path $target) { Remove-Item -Path $target -Recurse -Force }
+          dotnet publish src/VideoFrameCut.App/VideoFrameCut.App.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false --output $target
+          if ($LASTEXITCODE -ne 0) { throw 'FrameCut dotnet publish failed' }
+
+          # The native package contains three architectures; this folder is x64.
+          $native = Join-Path $target 'libvlc'
+          foreach ($arch in @('win-arm64', 'win-x86')) {
+            $other = Join-Path $native $arch
+            if (Test-Path $other) { Remove-Item $other -Recurse -Force }
+          }
+
+          foreach ($required in @(
+            'VideoFrameCut.App.exe',
+            'libvlc/win-x64/libvlc.dll',
+            'libvlc/win-x64/libvlccore.dll',
+            'libvlc/win-x64/plugins/codec/libavcodec_plugin.dll'
+          )) {
+            $file = Join-Path $target $required
+            if (-not (Test-Path $file)) { throw "Required portable file missing: $required" }
+          }
+
+          # GitHub rejects any single Git blob >= 100 MB.
+          $files = @(Get-ChildItem -Path $target -Recurse -File)
+          $large = @($files | Where-Object { $_.Length -ge 95MB })
+          if ($large.Count -gt 0) {
+            $large | Select-Object FullName,Length | Format-Table
+            throw 'Portable contains a file exceeding GitHub conservative 95 MiB limit'
+          }
+          $totalMB = [math]::Round((($files | Measure-Object Length -Sum).Sum / 1MB), 1)
+          Write-Host "Portable files: $($files.Count), total: $totalMB MiB"
+
+          $exeHash = (Get-FileHash -Algorithm SHA256 -Path (Join-Path $target 'VideoFrameCut.App.exe')).Hash
+          $sourceSha = (git rev-parse --short=12 HEAD).Trim()
+          @(
+            'FrameCut Windows x64 portable build',
+            "Source commit: $sourceSha",
+            "Built UTC: $((Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'))",
+            "VideoFrameCut.App.exe SHA256: $exeHash",
+            '',
+            'Keep the libvlc directory with the EXE.',
+            'Add ffmpeg.exe and ffprobe.exe beside VideoFrameCut.App.exe.',
+            'FFmpeg executables are not bundled here.',
+            'Unsigned software: scan the directory using Windows Security before execution.'
+          ) | Set-Content -Path (Join-Path $target 'BUILD_INFO.txt') -Encoding utf8
+
+      - name: Commit and push portable directory to main
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A -f -- portable/FrameCut-win-x64
+          $changed = @(git diff --cached --name-only)
+          if ($changed.Count -eq 0) {
+            Write-Host 'Nothing changed.'
+            exit 0
+          }
+          git commit -m 'build: update FrameCut win-x64 portable program [skip ci]'
+          if ($LASTEXITCODE -ne 0) { throw 'Git commit failed' }
+          git fetch origin main
+          if ($LASTEXITCODE -ne 0) { throw 'Git fetch failed' }
+          git rebase origin/main
+          if ($LASTEXITCODE -ne 0) { throw 'Git rebase failed; no force push attempted' }
+          git push origin HEAD:main
+          if ($LASTEXITCODE -ne 0) { throw 'Git push failed (permissions or size limits)' }
+          Write-Host 'Published portable/FrameCut-win-x64 on main'
