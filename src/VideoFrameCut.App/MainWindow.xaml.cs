@@ -231,9 +231,16 @@ public partial class MainWindow : Window
         _activeSource = null;
 
         if (_sources.Count > 0)
-            SourceList.SelectedIndex = Math.Min(position, _sources.Count - 1);
+        {
+            var next = _sources[Math.Min(position, _sources.Count - 1)];
+            SourceList.SelectedItem = next;
+            if (!ReferenceEquals(_activeSource, next))
+                ActivateSource(next);
+        }
         else
+        {
             ClearActiveSource();
+        }
         StatusText.Text = "목록에서만 제거했습니다. 원본 영상 파일은 삭제하지 않았습니다.";
     }
 
