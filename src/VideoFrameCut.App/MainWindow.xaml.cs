@@ -251,7 +251,7 @@ public partial class MainWindow : Window
         try
         {
             // Native NuGet binaries deploy alongside the published application.
-            Core.Initialize();
+            LibVLCSharp.Shared.Core.Initialize();
             _libVlc = new LibVLC("--no-video-title-show", "--no-osd");
             _vlcPlayer = new LibVLCSharp.Shared.MediaPlayer(_libVlc)
             {
@@ -289,7 +289,7 @@ public partial class MainWindow : Window
             PlaybackNoticeText.Text = "VLC가 원본 영상을 여는 중...";
             StatusText.Text = $"원본 직접 재생 준비 중: {source.Media.Codec} / {source.Media.AudioCodec ?? "무음"}";
             _vlcPlayer.Stop();
-            using var media = new Media(_libVlc, new Uri(source.Path, UriKind.Absolute));
+            using var media = new LibVLCSharp.Shared.Media(_libVlc, new Uri(source.Path, UriKind.Absolute));
             _vlcPlayer.Media = media;
             if (!_vlcPlayer.Play())
                 PlaybackError("VLC에서 원본 영상의 재생을 시작할 수 없습니다.");
