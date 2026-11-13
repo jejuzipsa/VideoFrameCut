@@ -3,10 +3,12 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
+    <ApplicationIcon>Assets/FrameCut.ico</ApplicationIcon>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
+    <Resource Include="Assets/FrameCut.ico" />
     <ProjectReference Include="../VideoFrameCut.Core/VideoFrameCut.Core.csproj" />
     <ProjectReference Include="../VideoFrameCut.Media/VideoFrameCut.Media.csproj" />
     <ProjectReference Include="../VideoFrameCut.Export/VideoFrameCut.Export.csproj" />
