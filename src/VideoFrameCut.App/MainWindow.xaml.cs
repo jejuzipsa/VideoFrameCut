@@ -1,9 +1,11 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Win32;
@@ -15,6 +17,33 @@ namespace VideoFrameCut.App;
 
 public partial class MainWindow : Window
 {
+    // Windows 11's non-client titlebar follows the editor dark palette even
+    // when Windows itself is configured for the light application theme.
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        if (!OperatingSystem.IsWindows()) return;
+
+        try
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            if (hwnd == IntPtr.Zero) return;
+            var darkMode = 1;
+            _ = DwmSetWindowAttribute(hwnd, 20, ref darkMode, sizeof(int));
+            // Optional Windows 11 caption and caption-text colors (COLORREF/BGR).
+            var captionColor = 0x00221915; // #151922
+            var captionTextColor = 0x00FAF4F0; // #F0F4FA
+            _ = DwmSetWindowAttribute(hwnd, 35, ref captionColor, sizeof(int));
+            _ = DwmSetWindowAttribute(hwnd, 36, ref captionTextColor, sizeof(int));
+        }
+        catch (DllNotFoundException) { }
+        catch (EntryPointNotFoundException) { }
+    }
+
+    [DllImport("dwmapi.dll", ExactSpelling = true)]
+    private static extern int DwmSetWindowAttribute(
+        IntPtr hwnd, int dwAttribute, ref int pvAttribute, int cbAttribute);
+
     private static readonly HashSet<string> VideoExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".mp4", ".mkv", ".mov", ".avi", ".webm", ".m4v", ".mts", ".ts"
