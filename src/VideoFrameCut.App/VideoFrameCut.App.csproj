@@ -9,6 +9,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Resource Include="Assets/FrameCut.ico" />
+    <Resource Include="Assets/FrameCut.png" />
     <ProjectReference Include="../VideoFrameCut.Core/VideoFrameCut.Core.csproj" />
     <ProjectReference Include="../VideoFrameCut.Media/VideoFrameCut.Media.csproj" />
     <ProjectReference Include="../VideoFrameCut.Export/VideoFrameCut.Export.csproj" />
