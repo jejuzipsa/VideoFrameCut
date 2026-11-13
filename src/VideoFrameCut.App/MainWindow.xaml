@@ -84,6 +84,13 @@
                                       MediaFailed="VideoPreview_MediaFailed"
                                       MediaEnded="VideoPreview_MediaEnded"/>
                         <Image x:Name="ExactStill" Stretch="Uniform" Visibility="Collapsed"/>
+                        <Border x:Name="PlaybackNotice" Background="#BB101722"
+                                Visibility="Collapsed" Padding="20" IsHitTestVisible="False">
+                            <TextBlock x:Name="PlaybackNoticeText" Text="재생용 미리보기 준비 중..."
+                                       Foreground="#EAF5FC" FontSize="16"
+                                       TextAlignment="Center" TextWrapping="Wrap"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
                     </Grid>
                 </Border>
                 <Border Grid.Row="1" Background="#202A38" CornerRadius="6" Margin="0,8,0,0" Padding="5,8">

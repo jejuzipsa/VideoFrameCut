@@ -52,6 +52,7 @@ public partial class MainWindow : Window
     private readonly MediaProbe _probe = new();
     private readonly ClipExporter _exporter = new();
     private readonly PreviewFrameService _framePreview = new();
+    private readonly PreviewProxyService _previewProxy = new();
     private readonly ObservableCollection<SourceVideoRow> _sources = new();
     private readonly ObservableCollection<ClipRow> _rows = new();
     private readonly DispatcherTimer _playTimer;
@@ -65,6 +66,10 @@ public partial class MainWindow : Window
     private CancellationTokenSource? _loadCancel;
     private CancellationTokenSource? _exportCancel;
     private CancellationTokenSource? _previewCancel;
+    private CancellationTokenSource? _playbackCancel;
+    private bool _playbackReady;
+    private bool _playWhenReady;
+    private bool _playbackUsesProxy;
     private bool _playing;
     private bool _clipEnded;
     private bool _updatingSlider;
@@ -207,6 +212,10 @@ public partial class MainWindow : Window
     private void ActivateSource(SourceVideoRow selected)
     {
         PausePlayback();
+        _playbackCancel?.Cancel();
+        _playbackReady = false;
+        _playWhenReady = false;
+        _playbackUsesProxy = false;
         _previewCancel?.Cancel();
         _activeSource = selected;
         _source = selected.Media;
@@ -229,19 +238,103 @@ public partial class MainWindow : Window
         PreviewModeText.Text = "재생 범위: 원본 전체";
         ExactStill.Visibility = Visibility.Collapsed;
 
+        VideoPreview.Stop();
+        VideoPreview.Source = null;
+        PlaybackNotice.Visibility = Visibility.Collapsed;
+        RefreshRows();
+        PreparePlayback(selected);
+    }
+
+    private void PreparePlayback(SourceVideoRow selected)
+    {
+        _playbackCancel?.Cancel();
+        var cancel = new CancellationTokenSource();
+        _playbackCancel = cancel;
+        _playbackReady = false;
+        _playbackUsesProxy = false;
+
+        if (PreviewProxyService.NeedsProxy(selected.Media))
+        {
+            GenerateCompatiblePreviewAsync(selected, cancel.Token);
+            return;
+        }
+
+        OpenPlaybackMedia(selected.Path, usingProxy: false);
+    }
+
+    private void OpenPlaybackMedia(string path, bool usingProxy)
+    {
+        if (_activeSource is null) return;
         try
         {
+            _playbackReady = false;
+            _playbackUsesProxy = usingProxy;
+            PlaybackNotice.Visibility = Visibility.Visible;
+            PlaybackNoticeText.Text = usingProxy
+                ? "호환성 미리보기 로딩 중..."
+                : "영상 재생기를 준비하는 중...";
             VideoPreview.Stop();
-            VideoPreview.Source = new Uri(selected.Path, UriKind.Absolute);
+            VideoPreview.Source = new Uri(Path.GetFullPath(path), UriKind.Absolute);
             VideoPreview.Play();
             VideoPreview.Pause();
         }
         catch (Exception ex)
         {
-            StatusText.Text = $"Windows 플레이어 준비 실패: {ex.Message}. 정확한 프레임 보기 기능을 사용하세요.";
+            if (!usingProxy && _activeSource is { } active &&
+                _playbackCancel is { } cancel)
+                GenerateCompatiblePreviewAsync(active, cancel.Token);
+            else
+                PlaybackError($"미리보기 열기 실패: {ex.Message}");
         }
+    }
 
-        RefreshRows();
+    private async void GenerateCompatiblePreviewAsync(SourceVideoRow source, CancellationToken cancellation)
+    {
+        _playbackReady = false;
+        _playbackUsesProxy = true;
+        VideoPreview.Stop();
+        VideoPreview.Source = null;
+
+        PlaybackNotice.Visibility = Visibility.Visible;
+        PlaybackNoticeText.Text = "AV1 / 특수 코덱을 재생용 H.264 영상으로 변환 중...";
+        StatusText.Text = $"{source.Media.Codec.ToUpperInvariant()} / " +
+            $"{source.Media.AudioCodec ?? "무음"}: 재생용 미리보기 생성 중 (원본은 변경하지 않음)";
+
+        var progress = new Progress<double>(value =>
+        {
+            if (cancellation.IsCancellationRequested ||
+                !ReferenceEquals(_activeSource, source)) return;
+            PlaybackNoticeText.Text = $"재생용 영상 준비 중 {value:P0}";
+            StatusText.Text = $"{source.Name}: 미리보기 변환 {value:P0} " +
+                "· 편집/분할은 원본 프레임 기준으로 계속 가능합니다.";
+        });
+
+        try
+        {
+            var proxy = await _previewProxy.GetOrCreateAsync(source.Media, progress, cancellation);
+            if (cancellation.IsCancellationRequested || !ReferenceEquals(_activeSource, source))
+                return;
+            PlaybackNoticeText.Text = "재생용 영상 준비 완료, 플레이어 로딩 중...";
+            OpenPlaybackMedia(proxy, usingProxy: true);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            if (cancellation.IsCancellationRequested || !ReferenceEquals(_activeSource, source))
+                return;
+            PlaybackError("재생용 미리보기 생성 실패: " + ex.Message);
+        }
+    }
+
+    private void PlaybackError(string message)
+    {
+        _playbackReady = false;
+        _playWhenReady = false;
+        PausePlayback();
+        PlaybackNoticeText.Text = message + Environment.NewLine +
+            "FFmpeg의 '정확한 프레임 보기'는 사용할 수 있습니다.";
+        PlaybackNotice.Visibility = Visibility.Visible;
+        StatusText.Text = message;
     }
 
     private void RemoveSource_Click(object sender, RoutedEventArgs e)
@@ -276,6 +369,11 @@ public partial class MainWindow : Window
     private void ClearActiveSource()
     {
         PausePlayback();
+        _playbackCancel?.Cancel();
+        _playbackReady = false;
+        _playWhenReady = false;
+        _playbackUsesProxy = false;
+        PlaybackNotice.Visibility = Visibility.Collapsed;
         _previewCancel?.Cancel();
         _activeSource = null;
         _source = null;
@@ -566,6 +664,15 @@ public partial class MainWindow : Window
     private void PlayPause_Click(object sender, RoutedEventArgs e)
     {
         if (_source is null) return;
+        if (!_playbackReady)
+        {
+            _playWhenReady = !_playWhenReady;
+            StatusText.Text = _playWhenReady
+                ? "미리보기 준비 후 자동으로 재생합니다. ▶를 다시 누르면 취소합니다."
+                : "미리보기 준비 후 자동 재생을 취소했습니다.";
+            UpdateTransportButton();
+            return;
+        }
         if (_playing)
         {
             PausePlayback();
@@ -618,7 +725,13 @@ public partial class MainWindow : Window
 
     private void StartPlayback(bool restart = false)
     {
-        if (_index is null || VideoPreview.Source is null) return;
+        if (_index is null) return;
+        if (!_playbackReady || VideoPreview.Source is null)
+        {
+            _playWhenReady = true;
+            UpdateTransportButton();
+            return;
+        }
         if (_clipBounds is { } bounds)
         {
             var position = VideoPreview.Position.TotalSeconds;
@@ -653,8 +766,9 @@ public partial class MainWindow : Window
     private void UpdateTransportButton()
     {
         if (TransportPlayPauseButton is null) return;
-        TransportPlayPauseButton.Content = _playing ? "Ⅱ" : "▶";
-        TransportPlayPauseButton.ToolTip = _playing ? "일시정지 (Space)" : "재생 (Space)";
+        TransportPlayPauseButton.Content = _playing ? "Ⅱ" : _playWhenReady ? "…" : "▶";
+        TransportPlayPauseButton.ToolTip = _playing ? "일시정지 (Space)" :
+            _playWhenReady ? "재생 준비 중, 클릭해서 자동 재생 취소" : "재생 (Space)";
         TransportPlayPauseButton.Background = new System.Windows.Media.SolidColorBrush(
             _playing ? System.Windows.Media.Color.FromRgb(120, 59, 67)
                      : System.Windows.Media.Color.FromRgb(35, 117, 141));
@@ -806,18 +920,41 @@ public partial class MainWindow : Window
     private void VideoPreview_MediaOpened(object sender, RoutedEventArgs e)
     {
         if (_index is null) return;
+        _playbackReady = true;
+        PlaybackNotice.Visibility = Visibility.Collapsed;
         SeekMediaToFrame((int)Math.Round(SeekSlider.Value));
-        // MediaOpened may arrive AFTER the user pressed Play. Never force a
-        // pause over an active playback request.
-        if (_playing) VideoPreview.Play();
-        else VideoPreview.Pause();
-        UpdateTransportButton();
+        if (_playWhenReady)
+        {
+            _playWhenReady = false;
+            StartPlayback();
+        }
+        else
+        {
+            VideoPreview.Pause();
+            UpdateTransportButton();
+            StatusText.Text = _playbackUsesProxy
+                ? "호환성 미리보기 준비 완료 · 영상 재생 가능 (실제 출력은 원본 기준)"
+                : "미리보기 재생 준비 완료";
+        }
     }
 
     private void VideoPreview_MediaFailed(object sender, ExceptionRoutedEventArgs e)
     {
+        if (_activeSource is null) return;
+        var resume = _playing || _playWhenReady;
         PausePlayback();
-        StatusText.Text = "Windows 재생기가 이 영상 코덱을 지원하지 않습니다. FFmpeg 정지화면은 사용할 수 있습니다.";
+        _playbackReady = false;
+        _playWhenReady = resume;
+        if (!_playbackUsesProxy && _playbackCancel is { } cancel &&
+            !cancel.IsCancellationRequested)
+        {
+            StatusText.Text = "Windows 재생기가 원본을 지원하지 않아 호환 미리보기를 생성합니다.";
+            GenerateCompatiblePreviewAsync(_activeSource, cancel.Token);
+        }
+        else
+        {
+            PlaybackError("Windows 재생기가 H.264 호환 미리보기도 열지 못했습니다.");
+        }
     }
 
     private void VideoPreview_MediaEnded(object sender, RoutedEventArgs e)
@@ -872,6 +1009,7 @@ public partial class MainWindow : Window
         _loadCancel?.Cancel();
         _exportCancel?.Cancel();
         _previewCancel?.Cancel();
+        _playbackCancel?.Cancel();
         _playTimer.Stop();
         VideoPreview.Stop();
     }
