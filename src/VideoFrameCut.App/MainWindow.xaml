@@ -94,7 +94,9 @@
             <Border Grid.Column="1" CornerRadius="6" Background="#080B10" ClipToBounds="True" Margin="0,0,12,0">
                 <Grid>
                     <MediaElement x:Name="VideoPreview" LoadedBehavior="Manual" UnloadedBehavior="Stop"
-                                  Stretch="Uniform" ScrubbingEnabled="True" MediaEnded="VideoPreview_MediaEnded"/>
+                                  Stretch="Uniform" ScrubbingEnabled="True" MediaOpened="VideoPreview_MediaOpened"
+                                  MediaFailed="VideoPreview_MediaFailed"
+                                  MediaEnded="VideoPreview_MediaEnded"/>
                     <Image x:Name="ExactStill" Stretch="Uniform" Visibility="Collapsed"/>
                 </Grid>
             </Border>
