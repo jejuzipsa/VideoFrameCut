@@ -37,7 +37,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $target = 'portable/FrameCut-win-x64'
           if (Test-Path $target) { Remove-Item -Path $target -Recurse -Force }
-          dotnet publish src/VideoFrameCut.App/VideoFrameCut.App.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false --output $target
+          dotnet publish src/VideoFrameCut.App/VideoFrameCut.App.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=false -p:DebugType=None -p:DebugSymbols=false --output $target
           if ($LASTEXITCODE -ne 0) { throw 'FrameCut dotnet publish failed' }
 
           # The native package contains three architectures; this folder is x64.
@@ -57,6 +57,7 @@ jobs:
             if (-not (Test-Path $file)) { throw "Required portable file missing: $required" }
           }
 
+          # Multifile self-contained output avoids a >100MB single-file executable.
           # GitHub rejects any single Git blob >= 100 MB.
           $files = @(Get-ChildItem -Path $target -Recurse -File)
           $large = @($files | Where-Object { $_.Length -ge 95MB })
