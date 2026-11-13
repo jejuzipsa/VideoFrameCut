@@ -24,3 +24,6 @@ tools/ffprobe/
 # OS
 Thumbs.db
 .DS_Store
+
+# Generated installer (CI may explicitly force-track this binary)
+installer/output/

@@ -1,0 +1,117 @@
+name: Build FrameCut portable installer EXE
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-installer.yml'
+      - 'installer/FrameCut.iss'
+      - 'src/**'
+      - 'tests/VideoFrameCut.Dependencies.Tests/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: framecut-installer-main
+  cancel-in-progress: false
+
+jobs:
+  build-installer:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Test first-run dependency installation
+        run: dotnet run --configuration Release --project tests/VideoFrameCut.Dependencies.Tests/VideoFrameCut.Dependencies.Tests.csproj
+
+      - name: Build self-contained multifile x64 portable program
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet publish src/VideoFrameCut.App/VideoFrameCut.App.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=false -p:DebugType=None -p:DebugSymbols=false --output publish/win-x64
+          if ($LASTEXITCODE -ne 0) { throw 'dotnet publish failed' }
+          foreach ($arch in @('win-arm64', 'win-x86')) {
+            $old = Join-Path 'publish/win-x64/libvlc' $arch
+            if (Test-Path $old) { Remove-Item $old -Recurse -Force }
+          }
+          foreach ($required in @(
+            'FrameCut.exe',
+            'libvlc/win-x64/libvlc.dll',
+            'libvlc/win-x64/libvlccore.dll',
+            'libvlc/win-x64/plugins/codec/libavcodec_plugin.dll'
+          )) {
+            if (-not (Test-Path (Join-Path 'publish/win-x64' $required))) {
+              throw "Portable build file missing: $required"
+            }
+          }
+
+      - name: Compile portable extraction installer with Inno Setup
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $compiler = (Get-Command ISCC.exe -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source)
+          if (-not $compiler) {
+            $candidate = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+            if (Test-Path $candidate) { $compiler = $candidate }
+          }
+          if (-not $compiler) {
+            choco install innosetup -y --no-progress
+            if ($LASTEXITCODE -ne 0) { throw 'Could not install Inno Setup' }
+            $candidate = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+            if (Test-Path $candidate) { $compiler = $candidate }
+          }
+          if (-not $compiler) { throw 'Inno Setup compiler (ISCC.exe) unavailable' }
+          & $compiler installer/FrameCut.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Inno Setup compilation failed' }
+          $setup = 'installer/output/FrameCut-Portable-Setup-win-x64.exe'
+          if (-not (Test-Path $setup)) { throw 'Portable setup EXE was not created' }
+          $hash = (Get-FileHash $setup -Algorithm SHA256).Hash
+          "$hash  FrameCut-Portable-Setup-win-x64.exe" | Set-Content -Path ($setup + '.sha256') -Encoding ascii
+          $size = [math]::Round((Get-Item $setup).Length / 1MB, 2)
+          Write-Host "Portable installer size: $size MiB"
+          Write-Host "SHA-256: $hash"
+
+      - name: Upload standalone installer EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: FrameCut-Portable-Installer-win-x64
+          path: |
+            installer/output/FrameCut-Portable-Setup-win-x64.exe
+            installer/output/FrameCut-Portable-Setup-win-x64.exe.sha256
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Commit installer directly to Git if under GitHub file-size limit
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $setup = 'installer/output/FrameCut-Portable-Setup-win-x64.exe'
+          $limit = 95MB
+          $size = (Get-Item $setup).Length
+          if ($size -ge $limit) {
+            Write-Warning "Installer is $([math]::Round($size / 1MB, 1)) MiB, too large for GitHub 100 MB individual blob. GitHub Actions artifact is available instead."
+            exit 0
+          }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f -- $setup ($setup + '.sha256')
+          $modified = @(git diff --cached --name-only)
+          if ($modified.Count -eq 0) { Write-Host 'Installer unchanged'; exit 0 }
+          git commit -m 'build: publish FrameCut portable setup installer [skip ci]'
+          if ($LASTEXITCODE -ne 0) { throw 'Could not commit installer' }
+          git fetch origin main
+          if ($LASTEXITCODE -ne 0) { throw 'Could not fetch main' }
+          git rebase origin/main
+          if ($LASTEXITCODE -ne 0) { throw 'Could not rebase installer; will not force-push' }
+          git push origin HEAD:main
+          if ($LASTEXITCODE -ne 0) { throw 'Could not push installer into main' }
