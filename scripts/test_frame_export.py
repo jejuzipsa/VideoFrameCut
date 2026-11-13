@@ -177,10 +177,30 @@ def main() -> None:
         ).decode().strip()
         assert "audio" in audio_info, f"Audio was not retained: {audio_info}"
 
+        # Reproduce the codec mix that displayed a black WPF preview for the
+        # user: AV1 Main video + Opus audio in an MP4 container.
+        av1_source = home / "av1_opus_preview.mp4"
+        run(
+            "ffmpeg", "-nostdin", "-v", "error",
+            "-f", "lavfi", "-i", "testsrc2=size=160x90:rate=12:duration=1.5",
+            "-f", "lavfi", "-i", "sine=frequency=550:sample_rate=48000:duration=1.5",
+            "-map", "0:v:0", "-map", "1:a:0",
+            "-c:v", "libaom-av1", "-cpu-used", "8", "-crf", "45", "-b:v", "0",
+            "-c:a", "libopus", "-b:a", "64k",
+            "-shortest", "-y", str(av1_source)
+        )
+        run(
+            "dotnet", "run", "--configuration", "Release",
+            "--project", str(ROOT / "tests" / "VideoFrameCut.Media.Tests" /
+                             "VideoFrameCut.Media.Tests.csproj"), "--",
+            str(av1_source), str(home / "preview-cache")
+        )
+
     print("PASS CFR: 4 segments, exact nonkeyframe extraction and selection")
     print("PASS H.264 B-frames: nonkeyframe 44-frame output, original audio retained")
     print("NOTE VFR: core PTS/split unit tests only; export integration pending a portable VFR fixture")
     print("PASS unique frame identity: no missing, repeated or reordered source frames")
+    print("PASS codec compatibility: generated AV1/Opus MP4 receives native H.264/AAC preview")
 
 
 if __name__ == "__main__":
