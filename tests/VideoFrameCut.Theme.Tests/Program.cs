@@ -16,6 +16,8 @@ internal static class Program
             var app = new App();
             app.InitializeComponent();
             var window = new MainWindow();
+            if (window.Icon is null || window.Icon.PixelWidth < 16)
+                throw new Exception("Film-scissors WPF window icon is missing or invalid.");
             if (window.FindName("ClipGrid") is not DataGrid grid)
                 throw new Exception("ClipGrid was not initialized.");
             if (grid.Columns.Count != 7)
