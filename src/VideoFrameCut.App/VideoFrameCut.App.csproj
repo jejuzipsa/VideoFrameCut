@@ -10,6 +10,8 @@
   <ItemGroup>
     <Resource Include="Assets/FrameCut.ico" />
     <Resource Include="Assets/FrameCut.png" />
+    <PackageReference Include="LibVLCSharp.WPF" Version="3.10.2" />
+    <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.24" />
     <ProjectReference Include="../VideoFrameCut.Core/VideoFrameCut.Core.csproj" />
     <ProjectReference Include="../VideoFrameCut.Media/VideoFrameCut.Media.csproj" />
     <ProjectReference Include="../VideoFrameCut.Export/VideoFrameCut.Export.csproj" />

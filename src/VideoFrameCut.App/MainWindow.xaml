@@ -1,6 +1,7 @@
 <Window x:Class="VideoFrameCut.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vlc="clr-namespace:LibVLCSharp.WPF;assembly=LibVLCSharp.WPF"
         Icon="Assets/FrameCut.png"
         Title="FrameCut — 초기 개발 버전" Height="870" Width="1360"
         MinHeight="680" MinWidth="1050"
@@ -80,18 +81,23 @@
                 </Grid.RowDefinitions>
                 <Border Grid.Row="0" CornerRadius="6" Background="#080B10" ClipToBounds="True">
                     <Grid>
-                        <MediaElement x:Name="VideoPreview" LoadedBehavior="Manual" UnloadedBehavior="Stop"
-                                      Stretch="Uniform" ScrubbingEnabled="True" MediaOpened="VideoPreview_MediaOpened"
-                                      MediaFailed="VideoPreview_MediaFailed"
-                                      MediaEnded="VideoPreview_MediaEnded"/>
-                        <Image x:Name="ExactStill" Stretch="Uniform" Visibility="Collapsed"/>
-                        <Border x:Name="PlaybackNotice" Background="#BB101722"
-                                Visibility="Collapsed" Padding="20" IsHitTestVisible="False">
-                            <TextBlock x:Name="PlaybackNoticeText" Text="재생용 미리보기 준비 중..."
-                                       Foreground="#EAF5FC" FontSize="16"
-                                       TextAlignment="Center" TextWrapping="Wrap"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
+                        <!-- LibVLCSharp WPF uses a native video HWND; overlays MUST
+                             be placed within VideoView.Content to appear above it. -->
+                        <vlc:VideoView x:Name="VideoPreview">
+                            <Grid Background="#01000000">
+                                <Image x:Name="ExactStill" Stretch="Uniform"
+                                       Visibility="Collapsed" IsHitTestVisible="False"/>
+                                <Border x:Name="PlaybackNotice" Background="#D0101722"
+                                        Visibility="Collapsed" Padding="20"
+                                        IsHitTestVisible="False">
+                                    <TextBlock x:Name="PlaybackNoticeText"
+                                               Text="내장 VLC 재생 엔진 준비 중..."
+                                               Foreground="#EAF5FC" FontSize="16"
+                                               TextAlignment="Center" TextWrapping="Wrap"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                            </Grid>
+                        </vlc:VideoView>
                     </Grid>
                 </Border>
                 <Border Grid.Row="1" Background="#202A38" CornerRadius="6" Margin="0,8,0,0" Padding="5,8">

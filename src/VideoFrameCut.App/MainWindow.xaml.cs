@@ -8,6 +8,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using LibVLCSharp.Shared;
 using Microsoft.Win32;
 using VideoFrameCut.Core;
 using VideoFrameCut.Export;
@@ -52,7 +53,6 @@ public partial class MainWindow : Window
     private readonly MediaProbe _probe = new();
     private readonly ClipExporter _exporter = new();
     private readonly PreviewFrameService _framePreview = new();
-    private readonly PreviewProxyService _previewProxy = new();
     private readonly ObservableCollection<SourceVideoRow> _sources = new();
     private readonly ObservableCollection<ClipRow> _rows = new();
     private readonly DispatcherTimer _playTimer;
@@ -66,10 +66,12 @@ public partial class MainWindow : Window
     private CancellationTokenSource? _loadCancel;
     private CancellationTokenSource? _exportCancel;
     private CancellationTokenSource? _previewCancel;
-    private CancellationTokenSource? _playbackCancel;
+    // LibVLC owns decoding, video rendering and audio playback.
+    // FFmpeg remains the sole authoritative frame-index/cut/export engine.
+    private LibVLC? _libVlc;
+    private LibVLCSharp.Shared.MediaPlayer? _vlcPlayer;
     private bool _playbackReady;
     private bool _playWhenReady;
-    private bool _playbackUsesProxy;
     private bool _playing;
     private bool _clipEnded;
     private bool _updatingSlider;
@@ -86,6 +88,8 @@ public partial class MainWindow : Window
         // segment. MediaElement seeking remains approximate, unlike export.
         _playTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(20) };
         _playTimer.Tick += PlaybackTimer_Tick;
+        // VideoView must be loaded before attaching the native player HWND.
+        VideoPreview.Loaded += VideoPreview_Loaded;
         UpdateControls();
     }
 
@@ -212,10 +216,9 @@ public partial class MainWindow : Window
     private void ActivateSource(SourceVideoRow selected)
     {
         PausePlayback();
-        _playbackCancel?.Cancel();
+        _vlcPlayer?.Stop();
         _playbackReady = false;
         _playWhenReady = false;
-        _playbackUsesProxy = false;
         _previewCancel?.Cancel();
         _activeSource = selected;
         _source = selected.Media;
@@ -238,92 +241,97 @@ public partial class MainWindow : Window
         PreviewModeText.Text = "재생 범위: 원본 전체";
         ExactStill.Visibility = Visibility.Collapsed;
 
-        VideoPreview.Stop();
-        VideoPreview.Source = null;
-        PlaybackNotice.Visibility = Visibility.Collapsed;
         RefreshRows();
         PreparePlayback(selected);
     }
 
-    private void PreparePlayback(SourceVideoRow selected)
+    private void VideoPreview_Loaded(object sender, RoutedEventArgs e)
     {
-        _playbackCancel?.Cancel();
-        var cancel = new CancellationTokenSource();
-        _playbackCancel = cancel;
-        _playbackReady = false;
-        _playbackUsesProxy = false;
-
-        if (PreviewProxyService.NeedsProxy(selected.Media))
+        if (_vlcPlayer is not null) return;
+        try
         {
-            GenerateCompatiblePreviewAsync(selected, cancel.Token);
+            // Native NuGet binaries deploy alongside the published application.
+            Core.Initialize();
+            _libVlc = new LibVLC("--no-video-title-show", "--no-osd");
+            _vlcPlayer = new LibVLCSharp.Shared.MediaPlayer(_libVlc)
+            {
+                EnableHardwareDecoding = true,
+                EnableKeyInput = false,
+                EnableMouseInput = false
+            };
+            _vlcPlayer.Playing += VlcPlayer_Playing;
+            _vlcPlayer.EncounteredError += VlcPlayer_EncounteredError;
+            _vlcPlayer.EndReached += VlcPlayer_EndReached;
+            VideoPreview.MediaPlayer = _vlcPlayer;
+            if (_activeSource is { } source)
+                PreparePlayback(source);
+        }
+        catch (Exception ex)
+        {
+            PlaybackError("LibVLC 재생 엔진을 불러오지 못했습니다: " + ex.Message);
+        }
+    }
+
+    private void PreparePlayback(SourceVideoRow source)
+    {
+        _playbackReady = false;
+        _clipEnded = false;
+        if (_vlcPlayer is null || _libVlc is null)
+        {
+            PlaybackNotice.Visibility = Visibility.Visible;
+            PlaybackNoticeText.Text = "내장 VLC 재생 엔진 준비 중...";
             return;
         }
 
-        OpenPlaybackMedia(selected.Path, usingProxy: false);
-    }
-
-    private void OpenPlaybackMedia(string path, bool usingProxy)
-    {
-        if (_activeSource is null) return;
         try
         {
-            _playbackReady = false;
-            _playbackUsesProxy = usingProxy;
             PlaybackNotice.Visibility = Visibility.Visible;
-            PlaybackNoticeText.Text = usingProxy
-                ? "호환성 미리보기 로딩 중..."
-                : "영상 재생기를 준비하는 중...";
-            VideoPreview.Stop();
-            VideoPreview.Source = new Uri(Path.GetFullPath(path), UriKind.Absolute);
-            VideoPreview.Play();
-            VideoPreview.Pause();
+            PlaybackNoticeText.Text = "VLC가 원본 영상을 여는 중...";
+            StatusText.Text = $"원본 직접 재생 준비 중: {source.Media.Codec} / {source.Media.AudioCodec ?? "무음"}";
+            _vlcPlayer.Stop();
+            using var media = new Media(_libVlc, new Uri(source.Path, UriKind.Absolute));
+            _vlcPlayer.Media = media;
+            if (!_vlcPlayer.Play())
+                PlaybackError("VLC에서 원본 영상의 재생을 시작할 수 없습니다.");
         }
         catch (Exception ex)
         {
-            if (!usingProxy && _activeSource is { } active &&
-                _playbackCancel is { } cancel)
-                GenerateCompatiblePreviewAsync(active, cancel.Token);
-            else
-                PlaybackError($"미리보기 열기 실패: {ex.Message}");
+            PlaybackError("VLC 원본 미리보기 오류: " + ex.Message);
         }
     }
 
-    private async void GenerateCompatiblePreviewAsync(SourceVideoRow source, CancellationToken cancellation)
+    private void VlcPlayer_Playing(object? sender, EventArgs e)
     {
-        _playbackReady = false;
-        _playbackUsesProxy = true;
-        VideoPreview.Stop();
-        VideoPreview.Source = null;
-
-        PlaybackNotice.Visibility = Visibility.Visible;
-        PlaybackNoticeText.Text = "AV1 / 특수 코덱을 재생용 H.264 영상으로 변환 중...";
-        StatusText.Text = $"{source.Media.Codec.ToUpperInvariant()} / " +
-            $"{source.Media.AudioCodec ?? "무음"}: 재생용 미리보기 생성 중 (원본은 변경하지 않음)";
-
-        var progress = new Progress<double>(value =>
+        // LibVLC events fire on native worker threads. Never touch WPF there.
+        Dispatcher.BeginInvoke(() =>
         {
-            if (cancellation.IsCancellationRequested ||
-                !ReferenceEquals(_activeSource, source)) return;
-            PlaybackNoticeText.Text = $"재생용 영상 준비 중 {value:P0}";
-            StatusText.Text = $"{source.Name}: 미리보기 변환 {value:P0} " +
-                "· 편집/분할은 원본 프레임 기준으로 계속 가능합니다.";
+            if (_vlcPlayer is null || _activeSource is null || _playbackReady) return;
+            _playbackReady = true;
+            _vlcPlayer.SetPause(true);
+            SeekMediaToFrame((int)Math.Round(SeekSlider.Value));
+            PlaybackNotice.Visibility = Visibility.Collapsed;
+            if (_playWhenReady)
+            {
+                _playWhenReady = false;
+                StartPlayback();
+            }
+            else
+            {
+                UpdateTransportButton();
+                StatusText.Text = "VLC 내장 플레이어 준비 완료 · 원본 영상 직접 재생";
+            }
         });
+    }
 
-        try
-        {
-            var proxy = await _previewProxy.GetOrCreateAsync(source.Media, progress, cancellation);
-            if (cancellation.IsCancellationRequested || !ReferenceEquals(_activeSource, source))
-                return;
-            PlaybackNoticeText.Text = "재생용 영상 준비 완료, 플레이어 로딩 중...";
-            OpenPlaybackMedia(proxy, usingProxy: true);
-        }
-        catch (OperationCanceledException) { }
-        catch (Exception ex)
-        {
-            if (cancellation.IsCancellationRequested || !ReferenceEquals(_activeSource, source))
-                return;
-            PlaybackError("재생용 미리보기 생성 실패: " + ex.Message);
-        }
+    private void VlcPlayer_EncounteredError(object? sender, EventArgs e)
+    {
+        Dispatcher.BeginInvoke(() => PlaybackError(
+            "LibVLC가 이 영상을 디코딩하지 못했습니다. FFmpeg의 정확한 프레임 확인은 사용할 수 있습니다."));
+    }
+
+    private void VlcPlayer_EndReached(object? sender, EventArgs e)
+    {
+        Dispatcher.BeginInvoke(() => HandlePlaybackEnded());
     }
 
     private void PlaybackError(string message)
@@ -331,8 +339,7 @@ public partial class MainWindow : Window
         _playbackReady = false;
         _playWhenReady = false;
         PausePlayback();
-        PlaybackNoticeText.Text = message + Environment.NewLine +
-            "FFmpeg의 '정확한 프레임 보기'는 사용할 수 있습니다.";
+        PlaybackNoticeText.Text = message;
         PlaybackNotice.Visibility = Visibility.Visible;
         StatusText.Text = message;
     }
@@ -369,10 +376,9 @@ public partial class MainWindow : Window
     private void ClearActiveSource()
     {
         PausePlayback();
-        _playbackCancel?.Cancel();
+        _vlcPlayer?.Stop();
         _playbackReady = false;
         _playWhenReady = false;
-        _playbackUsesProxy = false;
         PlaybackNotice.Visibility = Visibility.Collapsed;
         _previewCancel?.Cancel();
         _activeSource = null;
@@ -382,8 +388,6 @@ public partial class MainWindow : Window
         _clipBounds = null;
         _selectedClipId = null;
         _clipEnded = false;
-        VideoPreview.Stop();
-        VideoPreview.Source = null;
         ExactStill.Source = null;
         ExactStill.Visibility = Visibility.Collapsed;
         _suppressClipSelection = true;
@@ -573,13 +577,16 @@ public partial class MainWindow : Window
 
     private void SeekMediaToFrame(int frame)
     {
-        if (_index is null || VideoPreview.Source is null) return;
+        if (_index is null || _vlcPlayer is null || !_playbackReady) return;
         try
         {
             var seconds = Math.Max(0, _index.BoundaryTime(frame) - _index.StartTime);
-            VideoPreview.Position = TimeSpan.FromSeconds(seconds);
+            _vlcPlayer.Time = (long)Math.Round(seconds * 1_000);
         }
-        catch (InvalidOperationException) { }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            StatusText.Text = "해당 프레임으로 이동하지 못했습니다: " + ex.Message;
+        }
     }
 
     private void Split_Click(object sender, RoutedEventArgs e)
@@ -726,7 +733,7 @@ public partial class MainWindow : Window
     private void StartPlayback(bool restart = false)
     {
         if (_index is null) return;
-        if (!_playbackReady || VideoPreview.Source is null)
+        if (!_playbackReady || _vlcPlayer is null)
         {
             _playWhenReady = true;
             UpdateTransportButton();
@@ -734,21 +741,23 @@ public partial class MainWindow : Window
         }
         if (_clipBounds is { } bounds)
         {
-            var position = VideoPreview.Position.TotalSeconds;
+            var position = Math.Max(0, _vlcPlayer.Time) / 1_000.0;
             if (restart || _clipEnded || position < bounds.StartSeconds ||
                 position >= bounds.EndSeconds - 0.005)
                 SeekToFrame(bounds.FirstFrame);
         }
         else if (restart || _clipEnded ||
-                 (VideoPreview.NaturalDuration.HasTimeSpan &&
-                  VideoPreview.Position >= VideoPreview.NaturalDuration.TimeSpan))
+                 (_vlcPlayer.Length > 0 && _vlcPlayer.Time >= _vlcPlayer.Length))
         {
             SeekToFrame(0);
         }
 
         ExactStill.Visibility = Visibility.Collapsed;
         _clipEnded = false;
-        VideoPreview.Play();
+        // SetPause(false) explicitly resumes an already-opened VLC player;
+        // Play() starts one that reached its natural end.
+        if (!_vlcPlayer.IsPlaying) _vlcPlayer.Play();
+        _vlcPlayer.SetPause(false);
         _playing = true;
         UpdateTransportButton();
         _playTimer.Start();
@@ -759,7 +768,7 @@ public partial class MainWindow : Window
     {
         _playTimer.Stop();
         _playing = false;
-        VideoPreview.Pause();
+        if (_playbackReady) _vlcPlayer?.SetPause(true);
         UpdateTransportButton();
     }
 
@@ -777,7 +786,7 @@ public partial class MainWindow : Window
     private void PlaybackTimer_Tick(object? sender, EventArgs e)
     {
         if (!_playing || _index is null) return;
-        var seconds = VideoPreview.Position.TotalSeconds;
+        var seconds = Math.Max(0, _vlcPlayer?.Time ?? 0L) / 1_000.0;
         if (_clipBounds is { } bounds && seconds >= bounds.EndSeconds)
         {
             PausePlayback();
@@ -917,48 +926,9 @@ public partial class MainWindow : Window
         StatusText.Text = "작업 취소 요청됨";
     }
 
-    private void VideoPreview_MediaOpened(object sender, RoutedEventArgs e)
-    {
-        if (_index is null) return;
-        _playbackReady = true;
-        PlaybackNotice.Visibility = Visibility.Collapsed;
-        SeekMediaToFrame((int)Math.Round(SeekSlider.Value));
-        if (_playWhenReady)
-        {
-            _playWhenReady = false;
-            StartPlayback();
-        }
-        else
-        {
-            VideoPreview.Pause();
-            UpdateTransportButton();
-            StatusText.Text = _playbackUsesProxy
-                ? "호환성 미리보기 준비 완료 · 영상 재생 가능 (실제 출력은 원본 기준)"
-                : "미리보기 재생 준비 완료";
-        }
-    }
-
-    private void VideoPreview_MediaFailed(object sender, ExceptionRoutedEventArgs e)
+    private void HandlePlaybackEnded()
     {
         if (_activeSource is null) return;
-        var resume = _playing || _playWhenReady;
-        PausePlayback();
-        _playbackReady = false;
-        _playWhenReady = resume;
-        if (!_playbackUsesProxy && _playbackCancel is { } cancel &&
-            !cancel.IsCancellationRequested)
-        {
-            StatusText.Text = "Windows 재생기가 원본을 지원하지 않아 호환 미리보기를 생성합니다.";
-            GenerateCompatiblePreviewAsync(_activeSource, cancel.Token);
-        }
-        else
-        {
-            PlaybackError("Windows 재생기가 H.264 호환 미리보기도 열지 못했습니다.");
-        }
-    }
-
-    private void VideoPreview_MediaEnded(object sender, RoutedEventArgs e)
-    {
         PausePlayback();
         if (_clipBounds is not null)
         {
@@ -1009,8 +979,19 @@ public partial class MainWindow : Window
         _loadCancel?.Cancel();
         _exportCancel?.Cancel();
         _previewCancel?.Cancel();
-        _playbackCancel?.Cancel();
         _playTimer.Stop();
-        VideoPreview.Stop();
+        if (_vlcPlayer is not null)
+        {
+            _vlcPlayer.Playing -= VlcPlayer_Playing;
+            _vlcPlayer.EncounteredError -= VlcPlayer_EncounteredError;
+            _vlcPlayer.EndReached -= VlcPlayer_EndReached;
+            _vlcPlayer.Stop();
+            VideoPreview.MediaPlayer = null;
+            _vlcPlayer.Dispose();
+            _vlcPlayer = null;
+        }
+        _libVlc?.Dispose();
+        _libVlc = null;
+        VideoPreview.Dispose();
     }
 }

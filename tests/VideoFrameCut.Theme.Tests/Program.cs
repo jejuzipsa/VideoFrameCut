@@ -16,6 +16,11 @@ internal static class Program
             var app = new App();
             app.InitializeComponent();
             var window = new MainWindow();
+            if (window.FindName("VideoPreview") is not LibVLCSharp.WPF.VideoView)
+                throw new Exception("Native LibVLC WPF video view was not initialized.");
+            if (window.FindName("PlaybackNotice") is not Border ||
+                window.FindName("ExactStill") is not Image)
+                throw new Exception("VLC video overlays were not loaded.");
             if (window.Icon is null || window.Icon.Width < 16)
                 throw new Exception("Film-scissors WPF window icon is missing or invalid.");
             if (window.FindName("ClipGrid") is not DataGrid grid)
