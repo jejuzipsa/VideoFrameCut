@@ -10,26 +10,6 @@
         PreviewDragOver="Window_PreviewDragOver" PreviewDrop="Window_PreviewDrop"
         PreviewKeyDown="Window_PreviewKeyDown" Closing="Window_Closing">
     <Window.Resources>
-        <Style TargetType="{x:Type Button}">
-            <Setter Property="Background" Value="#34465B"/>
-            <Setter Property="Foreground" Value="#F2F5FA"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="14,8"/>
-            <Setter Property="Margin" Value="0,0,8,0"/>
-            <Setter Property="MinHeight" Value="34"/>
-        </Style>
-        <Style TargetType="{x:Type TextBlock}">
-            <Setter Property="Foreground" Value="#E9EDF4"/>
-        </Style>
-        <Style TargetType="{x:Type TextBox}">
-            <Setter Property="Background" Value="#242C3B"/>
-            <Setter Property="Foreground" Value="#E9EDF4"/>
-            <Setter Property="BorderBrush" Value="#455369"/>
-            <Setter Property="Padding" Value="6,6"/>
-        </Style>
-        <Style TargetType="{x:Type CheckBox}">
-            <Setter Property="Foreground" Value="#E9EDF4"/>
-        </Style>
         <Style x:Key="TransportButtonStyle" TargetType="{x:Type Button}"
                BasedOn="{StaticResource {x:Type Button}}">
             <Setter Property="FontFamily" Value="Segoe UI Symbol"/>
@@ -40,12 +20,6 @@
             <Setter Property="Margin" Value="3,0"/>
             <Setter Property="Padding" Value="9,5"/>
             <Setter Property="Background" Value="#29394B"/>
-        </Style>
-        <Style TargetType="{x:Type GroupBox}">
-            <Setter Property="BorderBrush" Value="#354356"/>
-            <Setter Property="Foreground" Value="#C9D8E9"/>
-            <Setter Property="Margin" Value="0,0,0,12"/>
-            <Setter Property="Padding" Value="10"/>
         </Style>
     </Window.Resources>
 
@@ -84,8 +58,7 @@
                     </StackPanel>
                     <ListBox x:Name="SourceList" SelectionMode="Single"
                              SelectionChanged="SourceList_SelectionChanged"
-                             Background="#242C3B" Foreground="#E9EDF4"
-                             BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <StackPanel Margin="4,7" ToolTip="{Binding Path}">
@@ -199,23 +172,24 @@
                       SelectionChanged="ClipGrid_SelectionChanged"
                       MouseDoubleClick="ClipGrid_MouseDoubleClick"
                       HeadersVisibility="Column" GridLinesVisibility="None"
-                      Background="#242C3B" Foreground="#F3F5FA" RowBackground="#242C3B"
-                      AlternatingRowBackground="#2B3545" BorderThickness="0">
+                      AlternationCount="2" ColumnHeaderHeight="38">
                 <DataGrid.Columns>
-                    <DataGridCheckBoxColumn Header="출력" Width="60"
+                    <DataGridCheckBoxColumn Header="출력" Width="66"
+                        ElementStyle="{StaticResource DarkGridCheckBoxStyle}"
+                        EditingElementStyle="{StaticResource DarkGridCheckBoxStyle}"
                         Binding="{Binding ExportEnabled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                     <DataGridTextColumn Header="#" Width="50" IsReadOnly="True"
-                        Binding="{Binding Number}"/>
+                        ElementStyle="{StaticResource DarkDataGridTextStyle}" Binding="{Binding Number}"/>
                     <DataGridTextColumn Header="시작 시간" Width="135" IsReadOnly="True"
-                        Binding="{Binding FromTime}"/>
+                        ElementStyle="{StaticResource DarkDataGridTextStyle}" Binding="{Binding FromTime}"/>
                     <DataGridTextColumn Header="끝 시간" Width="135" IsReadOnly="True"
-                        Binding="{Binding ToTime}"/>
+                        ElementStyle="{StaticResource DarkDataGridTextStyle}" Binding="{Binding ToTime}"/>
                     <DataGridTextColumn Header="원본 프레임 [시작, 끝)" Width="180" IsReadOnly="True"
-                        Binding="{Binding RangeText}"/>
+                        ElementStyle="{StaticResource DarkDataGridTextStyle}" Binding="{Binding RangeText}"/>
                     <DataGridTextColumn Header="프레임 수" Width="100" IsReadOnly="True"
-                        Binding="{Binding FrameCount}"/>
+                        ElementStyle="{StaticResource DarkDataGridTextStyle}" Binding="{Binding FrameCount}"/>
                     <DataGridTextColumn Header="길이" Width="110" IsReadOnly="True"
-                        Binding="{Binding Duration}"/>
+                        ElementStyle="{StaticResource DarkDataGridTextStyle}" Binding="{Binding Duration}"/>
                 </DataGrid.Columns>
             </DataGrid>
         </GroupBox>
