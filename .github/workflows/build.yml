@@ -16,6 +16,8 @@ jobs:
           dotnet-version: '8.0.x'
       - name: Core tests
         run: dotnet run --configuration Release --project tests/VideoFrameCut.Core.Tests/VideoFrameCut.Core.Tests.csproj
+      - name: FFmpeg first-run bootstrap safety tests
+        run: dotnet run --configuration Release --project tests/VideoFrameCut.Dependencies.Tests/VideoFrameCut.Dependencies.Tests.csproj
       - name: Build CLI
         run: dotnet build src/VideoFrameCut.Cli/VideoFrameCut.Cli.csproj --configuration Release
       - name: Build Windows WPF app

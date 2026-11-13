@@ -23,6 +23,8 @@ internal static class Program
                 if (player.IsPlaying) throw new Exception("Unexpected active VLC playback.");
             }
             var window = new MainWindow();
+            if (window.FindName("FFmpegInstallButton") is not Button)
+                throw new Exception("FFmpeg first-run installer control not found.");
             if (window.FindName("VideoPreview") is not LibVLCSharp.WPF.VideoView)
                 throw new Exception("Native LibVLC WPF video view was not initialized.");
             if (window.FindName("PlaybackNotice") is not Border ||
