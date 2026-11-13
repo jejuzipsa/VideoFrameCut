@@ -24,6 +24,18 @@ jobs:
         run: dotnet run --configuration Release --project tests/VideoFrameCut.Theme.Tests/VideoFrameCut.Theme.Tests.csproj
       - name: Publish Windows x64 preview (self-contained)
         run: dotnet publish src/VideoFrameCut.App/VideoFrameCut.App.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false --output publish/win-x64
+      - name: Check VLC native binaries in portable output
+        shell: pwsh
+        run: |
+          $root = 'publish/win-x64'
+          $libs = @(Get-ChildItem -Path $root -File -Recurse -Filter libvlc.dll)
+          $cores = @(Get-ChildItem -Path $root -File -Recurse -Filter libvlccore.dll)
+          $plugins = @(Get-ChildItem -Path $root -Directory -Recurse | Where-Object { $_.Name -eq 'plugins' })
+          if ($libs.Count -eq 0 -or $cores.Count -eq 0 -or $plugins.Count -eq 0) {
+            throw 'The portable package is missing LibVLC DLLs/plugins'
+          }
+          Write-Host 'LibVLC:' $libs[0].FullName
+          Write-Host 'Plugins:' $plugins[0].FullName
       - name: Upload Windows preview
         uses: actions/upload-artifact@v4
         with:

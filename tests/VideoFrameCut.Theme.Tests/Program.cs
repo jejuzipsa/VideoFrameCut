@@ -15,6 +15,13 @@ internal static class Program
             // resource/template lookup failures that 'dotnet build' can miss.
             var app = new App();
             app.InitializeComponent();
+            // Validate native VLC engine availability, not only XAML loading.
+            LibVLCSharp.Shared.Core.Initialize();
+            using (var vlc = new LibVLCSharp.Shared.LibVLC("--no-video-title-show"))
+            using (var player = new LibVLCSharp.Shared.MediaPlayer(vlc))
+            {
+                if (player.IsPlaying) throw new Exception("Unexpected active VLC playback.");
+            }
             var window = new MainWindow();
             if (window.FindName("VideoPreview") is not LibVLCSharp.WPF.VideoView)
                 throw new Exception("Native LibVLC WPF video view was not initialized.");
@@ -70,7 +77,7 @@ internal static class Program
             if (playButton.Template is null)
                 throw new Exception("Play button dark template missing.");
 
-            Console.WriteLine("PASS WPF dark theme: window loaded, headers, selection, text, checkboxes, buttons and progress");
+            Console.WriteLine("PASS WPF + LibVLC native engine: window loaded, headers, selection, text, checkboxes, buttons and progress");
             return 0;
         }
         catch (Exception ex)
