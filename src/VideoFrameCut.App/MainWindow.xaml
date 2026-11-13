@@ -153,6 +153,9 @@
                                    TextWrapping="Wrap" Foreground="#AFC1D5"/>
                         <WrapPanel>
                             <Button Content="S : 나누기" Click="Split_Click"/>
+                            <Button x:Name="MergeButton" Content="분할 취소 · 구간 합치기"
+                                    ToolTip="Ctrl/Shift로 연속된 구간 2개 이상 선택 후 합치기 (Ctrl+M)"
+                                    Click="Merge_Click" IsEnabled="False"/>
                             <Button Content="선택 삭제" Click="Delete_Click"/>
                         </WrapPanel>
                         <WrapPanel Margin="0,8,0,0">

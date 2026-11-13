@@ -36,6 +36,62 @@ public sealed class ClipEditor
         return true;
     }
 
+    /// <summary>
+    /// Remove only the cut boundaries between selected source-adjacent clips.
+    /// Missing, non-consecutive or separated-by-deletion selections are rejected
+    /// without touching edit history.
+    /// </summary>
+    public bool CanMerge(IEnumerable<Guid> segmentIds)
+    {
+        ArgumentNullException.ThrowIfNull(segmentIds);
+        var ids = segmentIds.ToHashSet();
+        if (ids.Count < 2) return false;
+
+        var selectedPositions = Enumerable.Range(0, _segments.Count)
+            .Where(i => ids.Contains(_segments[i].Id)).ToArray();
+        if (selectedPositions.Length != ids.Count || selectedPositions.Length < 2)
+            return false;
+
+        var first = selectedPositions[0];
+        var last = selectedPositions[^1];
+        if (last - first + 1 != ids.Count) return false;
+
+        for (var i = first; i < last; i++)
+        {
+            if (_segments[i].SourceRange.End != _segments[i + 1].SourceRange.Start)
+                return false;
+        }
+        return true;
+    }
+
+    public bool Merge(IEnumerable<Guid> segmentIds)
+    {
+        ArgumentNullException.ThrowIfNull(segmentIds);
+        var ids = segmentIds.ToHashSet();
+        if (!CanMerge(ids)) return false;
+
+        var first = _segments.FindIndex(s => ids.Contains(s.Id));
+        var count = ids.Count;
+        var last = first + count - 1;
+        var sourceStart = _segments[first].SourceRange.Start;
+        var sourceEnd = _segments[last].SourceRange.End;
+
+        // A merged clip is only auto-exported if ALL its selected parts were
+        // export-enabled. Previously excluded material must not be re-enabled.
+        var enabled = _segments.GetRange(first, count).All(s => s.ExportEnabled);
+        var merged = _segments[first] with
+        {
+            SourceRange = new FrameRange(sourceStart, sourceEnd),
+            ExportEnabled = enabled
+        };
+
+        Remember();
+        _segments.RemoveRange(first, count);
+        _segments.Insert(first, merged);
+        EnsureInvariants();
+        return true;
+    }
+
     public bool Delete(IEnumerable<Guid> segmentIds)
     {
         ArgumentNullException.ThrowIfNull(segmentIds);

@@ -13,6 +13,9 @@ var cases = new (string Name, Action Test)[]
     ("clip preview times use relative source PTS", TestClipPlaybackVfrOffset),
     ("three-second navigation respects source frames", TestSecondsNavigation),
     ("three-second navigation stays within selected clip", TestBoundedSecondsNavigation),
+    ("merge adjacent selected cuts without affecting other ranges", TestMergeAdjacent),
+    ("merge rejects nonadjacent and deleted-gap clips", TestMergeRejectsGaps),
+    ("merged export flag, undo and redo", TestMergeFlagsUndoRedo),
 };
 var failed = 0;
 foreach (var test in cases)
@@ -168,4 +171,77 @@ static void TestBoundedSecondsNavigation()
     Assert(FrameNavigation.BySeconds(vfr, 1, 2.0) == 3, "Use PTS nearest boundary, not average FPS.");
     Assert(FrameNavigation.BySeconds(vfr, 1, 2.0, new FrameRange(1, 3)) == 2,
         "VFR seek must not cross exclusive end.");
+}
+
+static void TestMergeAdjacent()
+{
+    // Example 10-second portions from the UI screenshot.
+    var index = DisplayFrameIndex.FromConstantFrameRate(12_000, 24);
+    var editor = new ClipEditor(index);
+    foreach (var cut in new[] { 7190, 7430, 7670, 7909, 8149 })
+        Assert(editor.SplitAt(cut), $"Split at {cut}.");
+
+    var before = editor.Segments.ToArray();
+    var first = before.Single(s => s.SourceRange == new FrameRange(7190, 7430));
+    var second = before.Single(s => s.SourceRange == new FrameRange(7430, 7670));
+    // Reverse selection order must not matter.
+    Assert(editor.CanMerge(new[] { second.Id, first.Id }), "Adjacent clips should be mergeable.");
+    Assert(editor.Merge(new[] { second.Id, first.Id }), "Merge must succeed.");
+    var after = editor.Segments.ToArray();
+    Assert(after.Length == before.Length - 1, "Merging 2 clips removes 1 cut.");
+    var merged = after.Single(s => s.Id == first.Id);
+    Assert(merged.SourceRange == new FrameRange(7190, 7670) && merged.SourceRange.Count == 480,
+        "Merged range must have all 480 source frames.");
+    Assert(after.Any(s => s.Id == before[0].Id && s == before[0]), "Previous range changed.");
+    Assert(after.Any(s => s.SourceRange == new FrameRange(7670, 7909)), "Next range changed.");
+    Assert(after.Zip(after.Skip(1)).All(x => !x.First.SourceRange.Overlaps(x.Second.SourceRange)),
+        "Merge introduced overlapping ranges.");
+    Assert(after.Sum(s => s.SourceRange.Count) == before.Sum(s => s.SourceRange.Count),
+        "Merge duplicated or lost source frames.");
+}
+
+static void TestMergeRejectsGaps()
+{
+    var editor = new ClipEditor(DisplayFrameIndex.FromConstantFrameRate(1200, 30));
+    foreach (var cut in new[] { 300, 600, 900 }) Assert(editor.SplitAt(cut), "Split expected.");
+    var segments = editor.Segments.ToArray();
+    Assert(!editor.CanMerge(new[] { segments[0].Id, segments[2].Id }),
+        "Cannot skip over unselected middle clip.");
+    Assert(!editor.Merge(new[] { segments[0].Id, segments[2].Id }), "Should not merge separated choices.");
+    Assert(!editor.CanUndo || editor.Undo(), "Existing split undo must stay valid.");
+
+    // Rebuild a fresh fixture for a deleted source gap.
+    editor = new ClipEditor(DisplayFrameIndex.FromConstantFrameRate(1200, 30));
+    editor.SplitAt(300);
+    editor.SplitAt(600);
+    editor.SplitAt(900);
+    var middle = editor.Segments.Single(s => s.SourceRange == new FrameRange(300, 600));
+    editor.Delete(new[] { middle.Id });
+    var afterDelete = editor.Segments.ToArray();
+    var left = afterDelete.Single(s => s.SourceRange == new FrameRange(0, 300));
+    var right = afterDelete.Single(s => s.SourceRange == new FrameRange(600, 900));
+    Assert(!editor.CanMerge(new[] { left.Id, right.Id }), "Cannot merge across deleted interval.");
+    var snapshot = editor.Segments.ToArray();
+    Assert(!editor.Merge(new[] { left.Id, right.Id }), "Gap merge must fail.");
+    Assert(editor.Segments.SequenceEqual(snapshot), "Invalid merge should not mutate edit list.");
+}
+
+static void TestMergeFlagsUndoRedo()
+{
+    var editor = new ClipEditor(DisplayFrameIndex.FromConstantFrameRate(900, 30));
+    editor.SplitAt(300);
+    editor.SplitAt(600);
+    var pieces = editor.Segments.ToArray();
+    editor.SetExportEnabled(new[] { pieces[1].Id }, false);
+
+    Assert(editor.Merge(new[] { pieces[0].Id, pieces[1].Id }), "Expected merge.");
+    var merged = editor.Segments[0];
+    Assert(!merged.ExportEnabled, "Mixed export flags must stay excluded (safe default).");
+    Assert(merged.SourceRange == new FrameRange(0, 600), "Invalid merged extent.");
+    Assert(editor.Undo(), "Merge undo expected.");
+    Assert(editor.Segments.Count == 3 && !editor.Segments[1].ExportEnabled,
+        "Undo must restore individual ranges and their export flags.");
+    Assert(editor.Redo(), "Merge redo expected.");
+    Assert(editor.Segments.Count == 2 && editor.Segments[0] == merged,
+        "Redo must reapply exact merged clip.");
 }

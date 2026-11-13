@@ -320,6 +320,7 @@ public partial class MainWindow : Window
     private void ClipGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_suppressClipSelection || _index is null) return;
+        UpdateMergeButton();
         if (ClipGrid.SelectedItem is ClipRow selected)
             SelectClip(selected);
         else if (ClipGrid.SelectedItems.Count == 0)
@@ -476,6 +477,31 @@ public partial class MainWindow : Window
             return;
         }
         if (_editor.Delete(ids)) RefreshRows();
+    }
+
+    private void Merge_Click(object sender, RoutedEventArgs e)
+    {
+        if (_editor is null || _loadCancel is not null || _exportCancel is not null) return;
+
+        var ids = ClipGrid.SelectedItems.Cast<ClipRow>().Select(row => row.Id).ToArray();
+        if (!_editor.CanMerge(ids))
+        {
+            StatusText.Text = "연속되고 원본 프레임이 맞닿은 구간을 2개 이상 선택하세요. " +
+                              "삭제한 구간을 건너뛰어 합칠 수는 없습니다.";
+            return;
+        }
+
+        var selected = _editor.Segments.Where(s => ids.Contains(s.Id)).ToArray();
+        var firstId = selected[0].Id;
+        var count = selected.Sum(s => s.SourceRange.Count);
+
+        // Pure edit-list operation. No video is encoded and source files are untouched.
+        if (_editor.Merge(ids))
+        {
+            RefreshRows(preferredId: firstId);
+            StatusText.Text = $"분할 취소 완료: {ids.Length}개 → 1개, 총 {count:N0}프레임. " +
+                              "나머지 구간과 원본 영상은 그대로 유지됩니다.";
+        }
     }
 
     private void AutoSplit_Click(object sender, RoutedEventArgs e)
@@ -728,7 +754,16 @@ public partial class MainWindow : Window
         BackFrameButton.IsEnabled = loaded;
         ForwardFrameButton.IsEnabled = loaded;
         TransportPlayPauseButton.IsEnabled = loaded;
+        UpdateMergeButton();
         UpdateTransportButton();
+    }
+
+    private void UpdateMergeButton()
+    {
+        if (MergeButton is null) return;
+        MergeButton.IsEnabled = _editor is not null &&
+            _exportCancel is null && _loadCancel is null &&
+            _editor.CanMerge(ClipGrid.SelectedItems.Cast<ClipRow>().Select(r => r.Id));
     }
 
     private void Cancel_Click(object sender, RoutedEventArgs e)
@@ -777,6 +812,7 @@ public partial class MainWindow : Window
         var control = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
         if (control && e.Key == Key.Z) Undo_Click(sender, e);
         else if (control && e.Key == Key.Y) Redo_Click(sender, e);
+        else if (control && e.Key == Key.M) Merge_Click(sender, e);
         else if (!control && e.Key == Key.S) Split_Click(sender, e);
         else if (!control && e.Key == Key.Delete && SourceList.IsKeyboardFocusWithin)
             RemoveSource_Click(sender, e);
