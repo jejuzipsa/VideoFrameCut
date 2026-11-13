@@ -7,4 +7,5 @@ public sealed record SourceVideoInfo(
     string Codec,
     double? NominalFramesPerSecond,
     bool HasAudio,
-    double? ContainerDurationSeconds);
+    double? ContainerDurationSeconds,
+    string? AudioCodec = null);

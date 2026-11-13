@@ -29,7 +29,9 @@ public sealed class MediaProbe
         return new SourceVideoInfo(
             path, video.GetProperty("width").GetInt32(), video.GetProperty("height").GetInt32(),
             StringProperty(video, "codec_name") ?? "unknown", fps,
-            streams.Any(s => StringProperty(s, "codec_type") == "audio"), containerDuration);
+            streams.Any(s => StringProperty(s, "codec_type") == "audio"), containerDuration,
+            streams.Where(s => StringProperty(s, "codec_type") == "audio")
+                .Select(s => StringProperty(s, "codec_name")).FirstOrDefault());
     }
 
     public async Task<DisplayFrameIndex> BuildFrameIndexAsync(string path, double? nominalFps = null,
