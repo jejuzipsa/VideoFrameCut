@@ -9,6 +9,8 @@ var cases = new (string Name, Action Test)[]
     ("export toggles and Undo/Redo", TestUndoRedo),
     ("invalid inputs and last frame", TestEdgeCases),
     ("CFR 24/30/60 exact boundaries", TestConstantFrameRates),
+    ("clip-only preview uses exclusive end frame", TestClipPlaybackBounds),
+    ("clip preview times use relative source PTS", TestClipPlaybackVfrOffset),
 };
 var failed = 0;
 foreach (var test in cases)
@@ -123,4 +125,24 @@ static void TestConstantFrameRates()
         Assert(result.Count == 4, $"Expected 4 segments at {fps} FPS.");
         Assert(result.All(r => r.Count == fps * 25), $"Wrong frames per clip at {fps} FPS.");
     }
+}
+
+static void TestClipPlaybackBounds()
+{
+    var index = DisplayFrameIndex.FromConstantFrameRate(300, 30);
+    var clip = new ClipPlaybackBounds(index, new FrameRange(30, 90));
+    Assert(clip.FirstFrame == 30 && clip.LastFrame == 89, "Last frame must be end - 1.");
+    Assert(Math.Abs(clip.StartSeconds - 1.0) < 1e-9, "Start time incorrect.");
+    Assert(Math.Abs(clip.EndSeconds - 3.0) < 1e-9, "Exclusive end time incorrect.");
+    Assert(clip.ClampFrame(0) == 30 && clip.ClampFrame(999) == 89, "Seeking escaped selected clip.");
+    Assert(!clip.IsAtOrBeyondEnd(2.99) && clip.IsAtOrBeyondEnd(3.0), "Stop must trigger at clip end.");
+}
+
+static void TestClipPlaybackVfrOffset()
+{
+    var index = new DisplayFrameIndex(new[] { 10.00, 10.04, 10.12, 10.24, 10.30 }, 10.44);
+    var clip = new ClipPlaybackBounds(index, new FrameRange(1, 4));
+    Assert(Math.Abs(clip.StartSeconds - .04) < 1e-8, "Source PTS offset not removed.");
+    Assert(Math.Abs(clip.EndSeconds - .30) < 1e-8, "Exclusive end for VFR must use next frame PTS.");
+    Assert(clip.LastFrame == 3, "Last VFR frame incorrect.");
 }

@@ -6,6 +6,8 @@
         WindowStartupLocation="CenterScreen"
         Background="#151922" Foreground="#E9EDF4"
         FontFamily="Segoe UI" FontSize="14"
+        AllowDrop="True"
+        PreviewDragOver="Window_PreviewDragOver" PreviewDrop="Window_PreviewDrop"
         PreviewKeyDown="Window_PreviewKeyDown" Closing="Window_Closing">
     <Window.Resources>
         <Style TargetType="{x:Type Button}">
@@ -47,7 +49,9 @@
 
         <DockPanel Grid.Row="0" LastChildFill="True" Margin="0,0,0,12">
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
-                <Button Content="영상 열기" Click="Open_Click"/>
+                <Button Content="영상 추가" Click="Open_Click"/>
+                <Button Content="원본 전체 보기" Click="FullSource_Click"/>
+                <Button Content="선택 구간 재생" Click="PlaySelected_Click"/>
                 <Button Content="재생 / 일시정지" Click="PlayPause_Click"/>
                 <Button Content="◀ 1프레임" Click="PreviousFrame_Click"/>
                 <Button Content="1프레임 ▶" Click="NextFrame_Click"/>
@@ -59,18 +63,43 @@
 
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="255"/>
                 <ColumnDefinition Width="3*"/>
-                <ColumnDefinition Width="1.25*"/>
+                <ColumnDefinition Width="1.45*"/>
             </Grid.ColumnDefinitions>
-            <Border Grid.Column="0" CornerRadius="6" Background="#080B10" ClipToBounds="True" Margin="0,0,12,0">
+            <GroupBox Grid.Column="0" Header="① 원본 영상 목록" Margin="0,0,12,0">
+                <DockPanel LastChildFill="True">
+                    <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+                        <TextBlock Text="영상 파일을 이 창에 끌어 놓으세요." TextWrapping="Wrap"
+                                   Foreground="#AFC1D5" FontSize="12" Margin="0,0,0,7"/>
+                        <Button Content="선택 원본 목록에서 제거" Click="RemoveSource_Click" Margin="0"/>
+                    </StackPanel>
+                    <ListBox x:Name="SourceList" SelectionMode="Single"
+                             SelectionChanged="SourceList_SelectionChanged"
+                             Background="#242C3B" Foreground="#E9EDF4"
+                             BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Margin="4,7" ToolTip="{Binding Path}">
+                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding Details}" Foreground="#AFC1D5"
+                                               TextWrapping="Wrap" FontSize="11" Margin="0,4,0,0"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </GroupBox>
+            <Border Grid.Column="1" CornerRadius="6" Background="#080B10" ClipToBounds="True" Margin="0,0,12,0">
                 <Grid>
                     <MediaElement x:Name="VideoPreview" LoadedBehavior="Manual" UnloadedBehavior="Stop"
                                   Stretch="Uniform" ScrubbingEnabled="True" MediaEnded="VideoPreview_MediaEnded"/>
                     <Image x:Name="ExactStill" Stretch="Uniform" Visibility="Collapsed"/>
                 </Grid>
             </Border>
-            <StackPanel Grid.Column="1">
-                <GroupBox Header="편집" >
+            <StackPanel Grid.Column="2">
+                <GroupBox Header="편집">
                     <StackPanel>
                         <TextBlock Text="자동 분할 간격(초)" Margin="0,0,0,6"/>
                         <DockPanel>
@@ -78,6 +107,13 @@
                                     Margin="8,0,0,0"/>
                             <TextBox x:Name="SplitSecondsBox" Text="25" VerticalContentAlignment="Center"/>
                         </DockPanel>
+                        <TextBlock x:Name="PreviewModeText" Text="재생 범위: 원본 전체"
+                                   TextWrapping="Wrap" Foreground="#8BD4E4" FontWeight="SemiBold"
+                                   Margin="0,6,0,8"/>
+                        <WrapPanel Margin="0,0,0,9">
+                            <Button Content="시작 프레임 확인" Click="ClipStart_Click"/>
+                            <Button Content="끝 프레임 확인" Click="ClipEnd_Click"/>
+                        </WrapPanel>
                         <TextBlock Text="수동 컷은 현재 재생 헤드 위치에 적용" Margin="0,12,0,8"
                                    TextWrapping="Wrap" Foreground="#AFC1D5"/>
                         <WrapPanel>
@@ -111,16 +147,18 @@
             <DockPanel>
                 <TextBlock x:Name="FrameTimeText" DockPanel.Dock="Right" VerticalAlignment="Center"
                            Text="00:00:00.000 / Frame 0" FontWeight="SemiBold"/>
-                <TextBlock Text="원본 프레임 타임라인" Foreground="#AFC1D5"/>
+                <TextBlock Text="타임라인 (구간 선택 시 해당 범위로 제한)" Foreground="#AFC1D5"/>
             </DockPanel>
             <Slider x:Name="SeekSlider" Grid.Row="1" Minimum="0" Maximum="1" Value="0"
                     Margin="0,8,0,0" TickFrequency="1" IsSnapToTickEnabled="True"
                     ValueChanged="SeekSlider_ValueChanged"/>
         </Grid>
 
-        <GroupBox Grid.Row="3" Header="구간 목록 (Ctrl/Shift로 다중 선택, 체크 해제하면 출력 제외)">
+        <GroupBox Grid.Row="3" Header="② 분할 구간 목록 (한 번 클릭: 구간 선택 / 더블클릭: 해당 구간만 재생)">
             <DataGrid x:Name="ClipGrid" AutoGenerateColumns="False" CanUserAddRows="False"
                       SelectionMode="Extended" SelectionUnit="FullRow" IsReadOnly="False"
+                      SelectionChanged="ClipGrid_SelectionChanged"
+                      MouseDoubleClick="ClipGrid_MouseDoubleClick"
                       HeadersVisibility="Column" GridLinesVisibility="None"
                       Background="#242C3B" Foreground="#F3F5FA" RowBackground="#242C3B"
                       AlternatingRowBackground="#2B3545" BorderThickness="0">
