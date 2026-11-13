@@ -145,11 +145,13 @@ public sealed class FFmpegBootstrapper
                         Guid.NewGuid().ToString("N") + ".partial");
                     var backup = dest + "." + Guid.NewGuid().ToString("N") + ".backup";
                     staged.Add((stage, dest, backup));
-                    await using var input = entry.Open();
-                    await using var output = new FileStream(stage, FileMode.CreateNew,
-                        FileAccess.Write, FileShare.None, 128 * 1024, useAsync: true);
-                    await input.CopyToAsync(output, cancellationToken);
-                    await output.FlushAsync(cancellationToken);
+                    await using (var input = entry.Open())
+                    await using (var output = new FileStream(stage, FileMode.CreateNew,
+                        FileAccess.Write, FileShare.None, 128 * 1024, useAsync: true))
+                    {
+                        await input.CopyToAsync(output, cancellationToken);
+                        await output.FlushAsync(cancellationToken);
+                    }
                     if (new FileInfo(stage).Length != entry.Length)
                         throw new InvalidDataException(fileName + " 압축 해제 후 크기가 일치하지 않습니다.");
                     using var peek = File.OpenRead(stage);
