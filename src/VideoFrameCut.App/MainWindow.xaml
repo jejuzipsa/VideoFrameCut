@@ -58,11 +58,21 @@
             <GroupBox Grid.Column="0" Header="① 원본 영상 목록" Margin="0,0,12,0">
                 <DockPanel LastChildFill="True">
                     <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
-                        <TextBlock Text="영상 파일을 이 창에 끌어 놓으세요." TextWrapping="Wrap"
-                                   Foreground="#AFC1D5" FontSize="12" Margin="0,0,0,7"/>
+                        <Border x:Name="SourceDropZone" AllowDrop="True"
+                                Background="#263849" BorderBrush="#67AFC5"
+                                BorderThickness="1" CornerRadius="5" Padding="10"
+                                MinHeight="62" Margin="0,0,0,6">
+                            <TextBlock Text="탐색기에서 영상 파일을 여기에 드롭"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       TextAlignment="Center" TextWrapping="Wrap"
+                                       Foreground="#D5E6F2" FontSize="12"/>
+                        </Border>
+                        <Button x:Name="PasteVideoPathsButton" Content="파일 / 경로 붙여넣기"
+                                ToolTip="탐색기에서 파일 복사(Ctrl+C), 또는 경로 복사 후 클릭"
+                                Click="PasteVideoPaths_Click" Margin="0,0,0,6"/>
                         <Button Content="선택 원본 목록에서 제거" Click="RemoveSource_Click" Margin="0"/>
                     </StackPanel>
-                    <ListBox x:Name="SourceList" SelectionMode="Single"
+                    <ListBox x:Name="SourceList" SelectionMode="Single" AllowDrop="True"
                              SelectionChanged="SourceList_SelectionChanged"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <ListBox.ItemTemplate>

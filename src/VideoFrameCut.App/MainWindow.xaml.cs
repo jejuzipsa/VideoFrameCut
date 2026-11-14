@@ -71,6 +71,7 @@ public partial class MainWindow : Window
     private CancellationTokenSource? _previewCancel;
     private CancellationTokenSource? _ffmpegInstallCancel;
     private bool _ffmpegReady;
+    private string? _lastVideoDirectory;
     // LibVLC owns decoding, video rendering and audio playback.
     // FFmpeg remains the sole authoritative frame-index/cut/export engine.
     private LibVLC? _libVlc;
@@ -99,7 +100,7 @@ public partial class MainWindow : Window
         UpdateControls();
     }
 
-    private static bool IsVideoFile(string path) => VideoExtensions.Contains(Path.GetExtension(path));
+    private static bool IsVideoFile(string path) => VideoSourceSelection.IsVideoFile(path);
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
@@ -176,20 +177,71 @@ public partial class MainWindow : Window
 
     private async void Open_Click(object sender, RoutedEventArgs e)
     {
+        // Always start with an empty filename. A previously typed absolute
+        // path from another folder must not be reused by the OS file picker.
+        var startingDirectory = !string.IsNullOrWhiteSpace(_lastVideoDirectory) &&
+            Directory.Exists(_lastVideoDirectory)
+            ? _lastVideoDirectory
+            : Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
         var dialog = new OpenFileDialog
         {
             Title = "원본 영상 추가 (여러 파일 선택 가능)",
             Filter = "동영상|*.mp4;*.mkv;*.mov;*.avi;*.webm;*.m4v;*.mts;*.ts|모든 파일|*.*",
-            Multiselect = true
+            InitialDirectory = startingDirectory,
+            FileName = string.Empty,
+            CheckFileExists = true,
+            ValidateNames = true,
+            Multiselect = true,
+            RestoreDirectory = true
         };
-        if (dialog.ShowDialog(this) == true)
-            await ImportVideosAsync(dialog.FileNames);
+
+        try
+        {
+            if (dialog.ShowDialog(this) == true)
+                await ImportVideosAsync(dialog.FileNames);
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or
+            UnauthorizedAccessException or System.Runtime.InteropServices.COMException)
+        {
+            StatusText.Text = "파일 선택창에서 영상 경로를 확인하지 못했습니다.";
+            MessageBox.Show(this, "파일 선택창에서 경로를 열 수 없습니다.\n" +
+                "실제 영상 파일을 선택하거나, 파일 탐색기에서 복사한 경로를 붙여넣어 주세요.\n\n" +
+                ex.Message, "영상 파일 선택 오류", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private async void PasteVideoPaths_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            string[] paths;
+            if (Clipboard.ContainsFileDropList())
+                paths = Clipboard.GetFileDropList().Cast<string>().ToArray();
+            else if (Clipboard.ContainsText())
+                paths = Clipboard.GetText().Split(new[] { "\r\n", "\n" },
+                    StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            else
+                paths = Array.Empty<string>();
+
+            if (paths.Length == 0)
+            {
+                StatusText.Text = "탐색기에서 MP4 파일을 복사한 뒤 '파일/경로 붙여넣기'를 누르세요.";
+                return;
+            }
+            await ImportVideosAsync(paths);
+        }
+        catch (System.Runtime.InteropServices.ExternalException ex)
+        {
+            StatusText.Text = "Windows 클립보드를 읽을 수 없습니다: " + ex.Message;
+        }
     }
 
     private void Window_PreviewDragOver(object sender, DragEventArgs e)
     {
-        var files = e.Data.GetData(DataFormats.FileDrop) as string[];
-        e.Effects = files?.Any(f => File.Exists(f) && IsVideoFile(f)) == true
+        // Explicit left-side WPF drop zone is important. The embedded VLC
+        // player uses a native HWND which may intercept shell drag events.
+        var items = GetDroppedPaths(e.Data);
+        e.Effects = items.Any(item => IsVideoFile(item) || Directory.Exists(item))
             ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
     }
@@ -197,8 +249,27 @@ public partial class MainWindow : Window
     private async void Window_PreviewDrop(object sender, DragEventArgs e)
     {
         e.Handled = true;
-        var files = e.Data.GetData(DataFormats.FileDrop) as string[];
-        if (files is not null) await ImportVideosAsync(files);
+        var files = GetDroppedPaths(e.Data);
+        if (files.Length == 0)
+        {
+            StatusText.Text = "탐색기에서 실제 영상 파일을 왼쪽 '여기에 드롭' 영역으로 끌어오세요.";
+            return;
+        }
+        await ImportVideosAsync(files);
+    }
+
+    private static string[] GetDroppedPaths(IDataObject data)
+    {
+        try
+        {
+            return data.GetDataPresent(DataFormats.FileDrop) &&
+                data.GetData(DataFormats.FileDrop) is string[] items
+                ? items : Array.Empty<string>();
+        }
+        catch (System.Runtime.InteropServices.COMException)
+        {
+            return Array.Empty<string>();
+        }
     }
 
     private async Task ImportVideosAsync(IEnumerable<string> files)
@@ -208,30 +279,36 @@ public partial class MainWindow : Window
             StatusText.Text = "FFmpeg 자동 설치 중입니다. 완료 후 영상을 추가하세요.";
             return;
         }
-        if (!_ffmpegReady)
-        {
-            await EnsureFFmpegAsync();
-            if (!_ffmpegReady) return;
-        }
         if (_loadCancel is not null || _exportCancel is not null)
         {
             StatusText.Text = "다른 영상 분석 또는 출력 작업이 진행 중입니다.";
             return;
         }
 
-        var paths = files.Where(f => File.Exists(f) && IsVideoFile(f))
-            .Select(Path.GetFullPath)
-            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-        if (paths.Length == 0)
+        // Validate before starting the dependency downloader. Never silently
+        // ignore a failed selection or tell the user to rename Unicode files.
+        var selection = VideoSourceSelection.Resolve(files);
+        var paths = selection.Files;
+        if (paths.Count == 0)
         {
-            StatusText.Text = "추가할 수 있는 동영상 파일이 없습니다.";
+            var reason = selection.Rejected.Count > 0
+                ? string.Join(Environment.NewLine, selection.Rejected.Take(8))
+                : "파일 탐색기에서 실제 영상 파일을 선택해 주세요.";
+            StatusText.Text = "불러올 영상이 없습니다: " + selection.Rejected.FirstOrDefault();
+            MessageBox.Show(this, reason, "영상 추가 실패",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
+        }
+        if (!_ffmpegReady)
+        {
+            await EnsureFFmpegAsync();
+            if (!_ffmpegReady) return;
         }
 
         var cancellation = new CancellationTokenSource();
         _loadCancel = cancellation;
         UpdateControls();
-        var errors = new List<string>();
+        var errors = selection.Rejected.ToList();
         try
         {
             foreach (var path in paths)
@@ -259,6 +336,7 @@ public partial class MainWindow : Window
 
                     var row = new SourceVideoRow(info, index);
                     _sources.Add(row);
+                    _lastVideoDirectory = Path.GetDirectoryName(path);
                     SourceList.SelectedItem = row;
                     StatusText.Text = $"원본 {_sources.Count}개 등록됨. {row.Name}";
                 }
