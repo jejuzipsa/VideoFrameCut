@@ -196,11 +196,38 @@ def main() -> None:
             str(av1_source), str(home / "preview-cache")
         )
 
+        # Three sources: different resolution/FPS and a source without audio.
+        # The app must normalize them while keeping selected source frame ranges.
+        join_a = home / "join_a.mp4"
+        join_b = home / "join_b.mp4"
+        join_c = home / "join_c.mp4"
+        run("ffmpeg", "-nostdin", "-v", "error",
+            "-f", "lavfi", "-i", "testsrc2=size=160x90:rate=24:duration=2.0",
+            "-f", "lavfi", "-i", "sine=frequency=400:sample_rate=48000:duration=2.0",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac",
+            "-shortest", "-y", str(join_a))
+        run("ffmpeg", "-nostdin", "-v", "error",
+            "-f", "lavfi", "-i", "testsrc2=size=128x96:rate=30:duration=2.0",
+            "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+            "-y", str(join_b))
+        run("ffmpeg", "-nostdin", "-v", "error",
+            "-f", "lavfi", "-i", "testsrc2=size=160x90:rate=24:duration=2.0",
+            "-f", "lavfi", "-i", "sine=frequency=750:sample_rate=48000:duration=2.0",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac",
+            "-shortest", "-y", str(join_c))
+        run(
+            "dotnet", "run", "--configuration", "Release",
+            "--project", str(ROOT / "tests" / "VideoFrameCut.Merge.Tests" /
+                             "VideoFrameCut.Merge.Tests.csproj"), "--",
+            str(join_a), str(join_b), str(join_c), str(home)
+        )
+
     print("PASS CFR: 4 segments, exact nonkeyframe extraction and selection")
     print("PASS H.264 B-frames: nonkeyframe 44-frame output, original audio retained")
     print("NOTE VFR: core PTS/split unit tests only; export integration pending a portable VFR fixture")
     print("PASS unique frame identity: no missing, repeated or reordered source frames")
     print("PASS codec compatibility: generated AV1/Opus MP4 receives native H.264/AAC preview")
+    print("PASS cross-source merging: cut, crossfade, fade-through-black, silent clips and mismatch resolution/FPS")
 
 
 if __name__ == "__main__":
