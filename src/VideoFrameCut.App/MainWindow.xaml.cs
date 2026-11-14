@@ -218,22 +218,48 @@ public partial class MainWindow : Window
             if (Clipboard.ContainsFileDropList())
                 paths = Clipboard.GetFileDropList().Cast<string>().ToArray();
             else if (Clipboard.ContainsText())
-                paths = Clipboard.GetText().Split(new[] { "\r\n", "\n" },
-                    StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+                paths = VideoSourceSelection.ParsePathText(Clipboard.GetText()).ToArray();
             else
                 paths = Array.Empty<string>();
 
             if (paths.Length == 0)
             {
-                StatusText.Text = "탐색기에서 MP4 파일을 복사한 뒤 '파일/경로 붙여넣기'를 누르세요.";
+                StatusText.Text = "탐색기에서 MP4 파일을 복사하거나 '경로 복사'한 뒤 다시 시도하세요.";
                 return;
             }
+
+            // Let the user see/edit pasted paths; then import immediately.
+            SourcePathBox.Text = string.Join(Environment.NewLine, paths);
             await ImportVideosAsync(paths);
         }
         catch (System.Runtime.InteropServices.ExternalException ex)
         {
             StatusText.Text = "Windows 클립보드를 읽을 수 없습니다: " + ex.Message;
         }
+    }
+
+    private async void ImportTypedPaths_Click(object sender, RoutedEventArgs e) =>
+        await ImportTypedPathsAsync();
+
+    private async void SourcePathBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        // Ctrl+Enter also works for multiline selections copied from Explorer.
+        if (e.Key != Key.Enter || !Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) return;
+        e.Handled = true;
+        await ImportTypedPathsAsync();
+    }
+
+    private async Task ImportTypedPathsAsync()
+    {
+        var paths = VideoSourceSelection.ParsePathText(SourcePathBox.Text);
+        if (paths.Count == 0)
+        {
+            StatusText.Text = "경로 입력란에 영상의 전체 경로를 붙여넣으세요.";
+            SourcePathBox.Focus();
+            return;
+        }
+
+        await ImportVideosAsync(paths);
     }
 
     private void Window_PreviewDragOver(object sender, DragEventArgs e)
@@ -252,7 +278,7 @@ public partial class MainWindow : Window
         var files = GetDroppedPaths(e.Data);
         if (files.Length == 0)
         {
-            StatusText.Text = "탐색기에서 실제 영상 파일을 왼쪽 '여기에 드롭' 영역으로 끌어오세요.";
+            StatusText.Text = "Windows가 파일 드롭 데이터를 보내지 않았습니다. 왼쪽 드롭 영역이나 '경로 입력'을 사용하세요.";
             return;
         }
         await ImportVideosAsync(files);
@@ -262,11 +288,19 @@ public partial class MainWindow : Window
     {
         try
         {
-            return data.GetDataPresent(DataFormats.FileDrop) &&
-                data.GetData(DataFormats.FileDrop) is string[] items
-                ? items : Array.Empty<string>();
+            if (data.GetDataPresent(DataFormats.FileDrop) &&
+                data.GetData(DataFormats.FileDrop) is string[] items)
+                return items;
+
+            // Some shell/file-manager implementations expose FileNameW instead
+            // of FileDrop. Never mistake ordinary URL/text drag payloads for files.
+            if (data.GetDataPresent("FileNameW") &&
+                data.GetData("FileNameW") is string[] names)
+                return names;
+
+            return Array.Empty<string>();
         }
-        catch (System.Runtime.InteropServices.COMException)
+        catch (System.Runtime.InteropServices.ExternalException)
         {
             return Array.Empty<string>();
         }
