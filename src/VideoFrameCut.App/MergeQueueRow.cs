@@ -1,3 +1,4 @@
+using System.IO;
 using VideoFrameCut.Export;
 
 namespace VideoFrameCut.App;
