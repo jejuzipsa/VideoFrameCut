@@ -53,9 +53,11 @@ public partial class MainWindow : Window
     private readonly MediaProbe _probe = new();
     private readonly FFmpegBootstrapper _ffmpegBootstrapper = new();
     private readonly ClipExporter _exporter = new();
+    private readonly VideoMergeExporter _mergeExporter = new();
     private readonly PreviewFrameService _framePreview = new();
     private readonly ObservableCollection<SourceVideoRow> _sources = new();
     private readonly ObservableCollection<ClipRow> _rows = new();
+    private readonly ObservableCollection<MergeQueueRow> _mergeQueue = new();
     private readonly DispatcherTimer _playTimer;
 
     private SourceVideoRow? _activeSource;
@@ -86,6 +88,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         SourceList.ItemsSource = _sources;
         ClipGrid.ItemsSource = _rows;
+        MergeQueue.ItemsSource = _mergeQueue;
 
         // Frequent boundary checks prevent preview from running into the next
         // segment. MediaElement seeking remains approximate, unlike export.
@@ -440,6 +443,11 @@ public partial class MainWindow : Window
         }
 
         var position = _sources.IndexOf(selected);
+        // Avoid retaining stale entries whose underlying source was removed.
+        for (var i = _mergeQueue.Count - 1; i >= 0; i--)
+            if (string.Equals(_mergeQueue[i].Clip.Source.Path, selected.Path,
+                StringComparison.OrdinalIgnoreCase))
+                _mergeQueue.RemoveAt(i);
         _suppressSourceSelection = true;
         _sources.Remove(selected);
         _suppressSourceSelection = false;
@@ -978,6 +986,165 @@ public partial class MainWindow : Window
         }
     }
 
+    private void AddToMerge_Click(object sender, RoutedEventArgs e)
+    {
+        if (_activeSource is null || _editor is null || _index is null || _exportCancel is not null) return;
+        var ids = ClipGrid.SelectedItems.Cast<ClipRow>().Select(r => r.Id).ToHashSet();
+        if (ids.Count == 0)
+        {
+            StatusText.Text = "병합할 원본 구간을 아래 분할 목록에서 선택하세요 (Ctrl/Shift로 여러 개 선택 가능).";
+            return;
+        }
+        var found = 0;
+        foreach (var segment in _editor.Segments.Where(s => ids.Contains(s.Id)))
+        {
+            _mergeQueue.Add(new MergeQueueRow(new VideoMergeClip(
+                _activeSource.Media, _activeSource.Index, segment.SourceRange)));
+            found++;
+        }
+        if (found > 0)
+        {
+            MergeQueue.SelectedIndex = _mergeQueue.Count - 1;
+            StatusText.Text = $"병합 작업 목록에 {found}개 추가 · 전체 {_mergeQueue.Count}개";
+        }
+        UpdateControls();
+    }
+
+    private void MergeQueue_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
+        UpdateControls();
+
+    private void MergeTransition_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (TransitionSecondsBox is null) return;
+        var cut = MergeTransitionCombo.SelectedIndex <= 0;
+        TransitionSecondsBox.IsEnabled = !cut;
+        UpdateControls();
+    }
+
+    private void MergeMoveUp_Click(object sender, RoutedEventArgs e) => MoveMergeQueue(-1);
+    private void MergeMoveDown_Click(object sender, RoutedEventArgs e) => MoveMergeQueue(1);
+
+    private void MoveMergeQueue(int delta)
+    {
+        if (_exportCancel is not null || MergeQueue.SelectedItem is not MergeQueueRow row) return;
+        var old = _mergeQueue.IndexOf(row);
+        var next = old + delta;
+        if (next < 0 || next >= _mergeQueue.Count) return;
+        _mergeQueue.Move(old, next);
+        MergeQueue.SelectedItem = row;
+        StatusText.Text = $"병합 순서 변경: {next + 1}/{_mergeQueue.Count}";
+        UpdateControls();
+    }
+
+    private void MergeRemove_Click(object sender, RoutedEventArgs e)
+    {
+        if (_exportCancel is not null || MergeQueue.SelectedItem is not MergeQueueRow row) return;
+        var index = _mergeQueue.IndexOf(row);
+        _mergeQueue.Remove(row);
+        MergeQueue.SelectedIndex = Math.Min(index, _mergeQueue.Count - 1);
+        UpdateControls();
+    }
+
+    private void MergeClear_Click(object sender, RoutedEventArgs e)
+    {
+        if (_exportCancel is not null) return;
+        _mergeQueue.Clear();
+        UpdateControls();
+    }
+
+    private async void MergeExport_Click(object sender, RoutedEventArgs e)
+    {
+        if (_mergeQueue.Count < 2 || _exportCancel is not null || _loadCancel is not null ||
+            _ffmpegInstallCancel is not null || !_ffmpegReady) return;
+
+        MergeTransitionMode transition = MergeTransitionCombo.SelectedIndex switch
+        {
+            1 => MergeTransitionMode.Crossfade,
+            2 => MergeTransitionMode.FadeThroughBlack,
+            _ => MergeTransitionMode.Cut
+        };
+        double duration = 0.5;
+        if (transition != MergeTransitionMode.Cut &&
+            (!double.TryParse(TransitionSecondsBox.Text, NumberStyles.Float,
+                CultureInfo.CurrentCulture, out duration) || !double.IsFinite(duration) ||
+             duration < 0.1 || duration > 3.0))
+        {
+            MessageBox.Show(this, "전환 시간은 0.1~3.0초 사이로 입력하세요.",
+                "병합 설정", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var ordered = _mergeQueue.Select(q => q.Clip).ToArray();
+        var settings = new VideoMergeSettings(transition, duration,
+            AudioCheck.IsChecked == true,
+            CpuCheck.IsChecked == true ? EncodingMode.Software : EncodingMode.Auto);
+        try
+        {
+            _ = VideoMergeExporter.Plan(ordered, settings);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "병합 설정 확인",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var dialog = new SaveFileDialog
+        {
+            Title = "병합한 영상 MP4 저장",
+            Filter = "MP4 동영상 (*.mp4)|*.mp4",
+            DefaultExt = ".mp4",
+            AddExtension = true,
+            FileName = "FrameCut_merged.mp4",
+            OverwritePrompt = true
+        };
+        if (dialog.ShowDialog(this) != true) return;
+        if (File.Exists(dialog.FileName))
+        {
+            MessageBox.Show(this,
+                "기존 파일 덮어쓰기는 지원하지 않습니다. 다른 파일명으로 저장해 주세요.",
+                "병합 파일명", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var tokenSource = new CancellationTokenSource();
+        _exportCancel = tokenSource;
+        ExportProgressBar.Value = 0;
+        UpdateControls();
+        var progress = new Progress<VideoMergeProgress>(p =>
+        {
+            StatusText.Text = p.Message;
+            ExportProgressBar.Value = p.Total == 0 ? 0 : 100.0 * p.Completed / p.Total;
+        });
+        try
+        {
+            var result = await _mergeExporter.ExportAsync(
+                ordered, dialog.FileName, settings, progress, tokenSource.Token);
+            ExportProgressBar.Value = 100;
+            StatusText.Text = $"병합 완료: {result.SourceCount}개 구간 · {result.OutputFrames:N0}프레임 " +
+                $"· {result.Width}×{result.Height} / {result.FramesPerSecond}fps";
+            MessageBox.Show(this, result.OutputFile + Environment.NewLine +
+                "원본 구간은 변경하지 않았습니다.", "병합 완료",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText.Text = "병합 취소됨. 임시 파일을 정리했습니다.";
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = "영상 병합 실패: " + ex.Message;
+            MessageBox.Show(this, ex.Message, "병합 실패",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            _exportCancel = null;
+            tokenSource.Dispose();
+            UpdateControls();
+        }
+    }
+
     private void UpdateControls()
     {
         if (ExportButton is null || CancelButton is null) return;
@@ -991,6 +1158,21 @@ public partial class MainWindow : Window
         FFmpegInstallButton.Content = _ffmpegInstallCancel is null
             ? "FFmpeg 확인 / 설치" : "FFmpeg 설치 중...";
         AddVideoButton.IsEnabled = _ffmpegInstallCancel is null;
+        if (MergeExportButton is not null)
+        {
+            var idle = _exportCancel is null && _loadCancel is null &&
+                _ffmpegInstallCancel is null;
+            AddToMergeButton.IsEnabled = idle && _editor is not null;
+            MergeExportButton.IsEnabled = idle && _ffmpegReady && _mergeQueue.Count >= 2;
+            MergeMoveUpButton.IsEnabled = idle &&
+                MergeQueue.SelectedIndex > 0;
+            MergeMoveDownButton.IsEnabled = idle &&
+                MergeQueue.SelectedIndex >= 0 &&
+                MergeQueue.SelectedIndex < _mergeQueue.Count - 1;
+            MergeRemoveButton.IsEnabled = idle && MergeQueue.SelectedItem is not null;
+            MergeClearButton.IsEnabled = idle && _mergeQueue.Count > 0;
+            MergeQueue.IsEnabled = idle;
+        }
         var loaded = _index is not null;
         PreviousClipButton.IsEnabled = loaded && _editor?.Segments.Count > 0;
         NextClipButton.IsEnabled = loaded && _editor?.Segments.Count > 0;
