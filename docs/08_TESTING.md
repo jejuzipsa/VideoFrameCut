@@ -59,3 +59,11 @@ python3 scripts/test_frame_export.py
 - 프록시 생성 서비스는 이전 코드로 남아 있어도 UI에서는 호출하지 않습니다. 원본은 재인코딩하지 않고 재생합니다.
 - 정확한 1프레임 확인과 최종 추출에는 FFmpeg를 계속 사용합니다.
 - 실제 Windows PC에서 AV1/Opus, 4K, GPU 가속, 시간 탐색 및 재생/정지를 추가 검증해야 합니다.
+
+## FFmpeg 다중 원본 병합/전환 테스트 (2026-11-14)
+
+- `tests/VideoFrameCut.Merge.Tests`는 실제 다른 해상도/프레임 속도(160×90@24fps, 128×96@30fps) 및 무음 영상을 섞어 3개 구간을 병합합니다.
+- `scripts/test_frame_export.py`는 기본 컷 연결, 크로스페이드(FFmpeg xfade=fade), 페이드 아웃·인(fadeblack) 각각에 대해 생성된 MP4의 H.264/AAC·크기·프레임 수를 검사합니다.
+- 원본 선택은 디코딩된 프레임 번호 `[start,end)` 기준이고, 병합 규격만 첫 원본의 해상도와 정수 FPS로 통일합니다.
+- 페이드 시간은 0.1~3초(기본 0.5초), 짧은 구간에는 전환 시간을 더 짧게 지정해야 합니다.
+- Windows에서는 WPF 병합 작업 목록/다크 ComboBox 로딩과 설치 EXE 빌드도 확인합니다.

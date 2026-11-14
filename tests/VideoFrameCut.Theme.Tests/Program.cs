@@ -32,6 +32,20 @@ internal static class Program
                 throw new Exception("VLC video overlays were not loaded.");
             if (window.Icon is null || window.Icon.Width < 16)
                 throw new Exception("Film-scissors WPF window icon is missing or invalid.");
+            if (window.FindName("MergeQueue") is not ListBox mergeQueue)
+                throw new Exception("Cross-source merge queue was not initialized.");
+            if (window.FindName("MergeTransitionCombo") is not ComboBox mergeMode ||
+                mergeMode.Items.Count != 3 || mergeMode.SelectedIndex != 0)
+                throw new Exception("Merge transition selector must have three choices with cut as the default.");
+            if (mergeMode.Template is null || window.FindName("TransitionSecondsBox") is not TextBox seconds)
+                throw new Exception("Merge transition selector or fade duration setting is missing.");
+            if (seconds.Text != "0.5")
+                throw new Exception("Default crossfade duration should be 0.5 seconds.");
+            if (window.FindName("MergeExportButton") is not Button)
+                throw new Exception("Merge MP4 output action is missing.");
+            mergeMode.ApplyTemplate();
+            if (mergeMode.Template is null || mergeQueue.ItemsSource is null)
+                throw new Exception("Merge UI dark style and list binding are not loaded.");
             if (window.FindName("ClipGrid") is not DataGrid grid)
                 throw new Exception("ClipGrid was not initialized.");
             if (grid.Columns.Count != 7)
