@@ -147,6 +147,42 @@
         </Setter>
     </Style>
 
+    <!-- Keep the three compression presets readable on the dark UI. -->
+    <Style TargetType="{x:Type RadioButton}">
+        <Setter Property="Foreground" Value="{StaticResource TextDarkBrush}"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type RadioButton}">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Grid Width="18" Height="18" Margin="0,0,8,0">
+                            <Ellipse x:Name="RadioCircle" Fill="#263446"
+                                     Stroke="#7890A7" StrokeThickness="1.5"/>
+                            <Ellipse x:Name="RadioDot" Width="8" Height="8"
+                                     Fill="#FFFFFF" Visibility="Collapsed"/>
+                        </Grid>
+                        <ContentPresenter ContentSource="Content" RecognizesAccessKey="True"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                    </StackPanel>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="RadioCircle" Property="Fill" Value="{StaticResource AccentDarkBrush}"/>
+                            <Setter TargetName="RadioCircle" Property="Stroke" Value="#8BD4E4"/>
+                            <Setter TargetName="RadioDot" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="RadioCircle" Property="Stroke" Value="#A3D9EA"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.55"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style x:Key="DarkGridCheckBoxStyle" TargetType="{x:Type CheckBox}"
            BasedOn="{StaticResource {x:Type CheckBox}}">
         <Setter Property="HorizontalAlignment" Value="Center"/>
