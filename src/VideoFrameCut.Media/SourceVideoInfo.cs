@@ -8,4 +8,8 @@ public sealed record SourceVideoInfo(
     double? NominalFramesPerSecond,
     bool HasAudio,
     double? ContainerDurationSeconds,
-    string? AudioCodec = null);
+    string? AudioCodec = null,
+    string? ColorTransfer = null,
+    string? ColorPrimaries = null,
+    string? ColorSpace = null,
+    string? PixelFormat = null);

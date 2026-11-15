@@ -31,7 +31,11 @@ public sealed class MediaProbe
             StringProperty(video, "codec_name") ?? "unknown", fps,
             streams.Any(s => StringProperty(s, "codec_type") == "audio"), containerDuration,
             streams.Where(s => StringProperty(s, "codec_type") == "audio")
-                .Select(s => StringProperty(s, "codec_name")).FirstOrDefault());
+                .Select(s => StringProperty(s, "codec_name")).FirstOrDefault(),
+            StringProperty(video, "color_transfer"),
+            StringProperty(video, "color_primaries"),
+            StringProperty(video, "color_space"),
+            StringProperty(video, "pix_fmt"));
     }
 
     public async Task<DisplayFrameIndex> BuildFrameIndexAsync(string path, double? nominalFps = null,
