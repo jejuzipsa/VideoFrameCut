@@ -112,19 +112,46 @@ public sealed class ClipEditor
         return true;
     }
 
-    public bool SplitByTime(double seconds)
+    /// <summary>
+    /// Split only the explicitly targeted segment IDs. Untargeted segments
+    /// retain their IDs, frame ranges, export flags and position unchanged.
+    /// All selected splits are committed as one atomic Undo/Redo operation.
+    /// </summary>
+    public bool SplitByTime(double seconds, IEnumerable<Guid> segmentIds)
     {
+        ArgumentNullException.ThrowIfNull(segmentIds);
+        var ids = segmentIds.ToHashSet();
+        if (ids.Count == 0) return false;
+
+        // Validate time interval even when no selected segment needs splitting.
+        if (!double.IsFinite(seconds) || seconds < 0.05)
+            throw new ArgumentOutOfRangeException(nameof(seconds),
+                "Split interval must be at least 0.05 seconds.");
+
         var replacements = _segments
-            .Select(s => (Original: s, Ranges: TimeSplitter.Split(Index, s.SourceRange, seconds)))
+            .Select(s => (Original: s, Ranges: ids.Contains(s.Id)
+                ? TimeSplitter.Split(Index, s.SourceRange, seconds)
+                : (IReadOnlyList<FrameRange>)new[] { s.SourceRange }))
             .ToList();
         if (replacements.All(item => item.Ranges.Count == 1)) return false;
 
         Remember();
         _segments = replacements.SelectMany(item => item.Ranges.Select((range, n) =>
-            item.Original with { Id = n == 0 ? item.Original.Id : Guid.NewGuid(), SourceRange = range })).ToList();
+            item.Original with
+            {
+                Id = n == 0 ? item.Original.Id : Guid.NewGuid(),
+                SourceRange = range
+            })).ToList();
         EnsureInvariants();
         return true;
     }
+
+    /// <summary>
+    /// Legacy all-segment operation for scripts/tests which explicitly need it.
+    /// WPF's time-split button MUST pass the checked/selected segment IDs.
+    /// </summary>
+    public bool SplitByTime(double seconds) =>
+        SplitByTime(seconds, _segments.Select(s => s.Id));
 
     public bool Undo()
     {
