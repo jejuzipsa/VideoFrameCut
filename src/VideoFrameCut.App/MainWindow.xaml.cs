@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using LibVLCSharp.Shared;
@@ -54,6 +55,7 @@ public partial class MainWindow : Window
     private readonly FFmpegBootstrapper _ffmpegBootstrapper = new();
     private readonly ClipExporter _exporter = new();
     private readonly VideoMergeExporter _mergeExporter = new();
+    private readonly VideoTranscodeExporter _transcodeExporter = new();
     private readonly PreviewFrameService _framePreview = new();
     private readonly ObservableCollection<SourceVideoRow> _sources = new();
     private readonly ObservableCollection<ClipRow> _rows = new();
@@ -83,6 +85,7 @@ public partial class MainWindow : Window
     private bool _previewVolumeUiReady;
     private int _previewVolume = 50;
     private bool _previewMuted;
+    private int _rotationDegrees;
     private bool _updatingSlider;
     private bool _suppressSourceSelection;
     private bool _suppressClipSelection;
@@ -524,6 +527,9 @@ public partial class MainWindow : Window
             $"{selected.Index.FrameCount:N0}프레임";
         PreviewModeText.Text = "재생 범위: 원본 전체";
         ExactStill.Visibility = Visibility.Collapsed;
+        _rotationDegrees = 0;
+        FlipHorizontalCheck.IsChecked = false;
+        UpdateTransformPreview();
 
         RefreshRows();
         PreparePlayback(selected);
@@ -1373,6 +1379,129 @@ public partial class MainWindow : Window
         }
     }
 
+
+    private void RotateLeft_Click(object sender, RoutedEventArgs e) => RotateBy(-90);
+    private void RotateRight_Click(object sender, RoutedEventArgs e) => RotateBy(90);
+    private void Rotate180_Click(object sender, RoutedEventArgs e) => RotateBy(180);
+
+    private void RotateBy(int angle)
+    {
+        _rotationDegrees = (_rotationDegrees + angle + 360) % 360;
+        UpdateTransformPreview();
+    }
+
+    private void FlipHorizontal_Changed(object sender, RoutedEventArgs e) =>
+        UpdateTransformPreview();
+
+    private void TransformReset_Click(object sender, RoutedEventArgs e)
+    {
+        _rotationDegrees = 0;
+        if (FlipHorizontalCheck is not null) FlipHorizontalCheck.IsChecked = false;
+        UpdateTransformPreview();
+    }
+
+    private void UpdateTransformPreview()
+    {
+        if (ExactStill is null || FlipHorizontalCheck is null || OrientationText is null)
+            return;
+        var mirrored = FlipHorizontalCheck.IsChecked == true;
+        var transform = new TransformGroup();
+        // The exported FFmpeg filter also rotates before screen-horizontal flip.
+        transform.Children.Add(new RotateTransform(_rotationDegrees));
+        if (mirrored) transform.Children.Add(new ScaleTransform(-1, 1));
+        ExactStill.LayoutTransform = transform;
+        ExactStill.HorizontalAlignment = HorizontalAlignment.Center;
+        ExactStill.VerticalAlignment = VerticalAlignment.Center;
+        OrientationText.Text = $"회전 {_rotationDegrees}° · 좌우 반전 {(mirrored ? "적용" : "안 함")}";
+    }
+
+    private async void TransformPreview_Click(object sender, RoutedEventArgs e)
+    {
+        if (_source is null) return;
+        PausePlayback();
+        UpdateTransformPreview();
+        // Preview is an exact decoded STILL frame: VLC continuous playback
+        // shows the original until a transformed MP4 has been saved.
+        await ShowExactFrameAsync();
+        if (ExactStill.Visibility == Visibility.Visible)
+            StatusText.Text = "회전·반전 정지화면 미리보기. 저장 시 전체 영상에 적용합니다.";
+    }
+
+    private async void TranscodeExport_Click(object sender, RoutedEventArgs e)
+    {
+        if (_source is null || !_ffmpegReady || _exportCancel is not null ||
+            _loadCancel is not null || _ffmpegInstallCancel is not null) return;
+
+        var source = _source;
+        var preset = PresetSmallRadio.IsChecked == true ? CompressionPreset.SmallFile
+            : PresetBalancedRadio.IsChecked == true ? CompressionPreset.Balanced
+            : CompressionPreset.HighQuality;
+        var options = new VideoTransformOptions(
+            preset, _rotationDegrees, FlipHorizontalCheck.IsChecked == true);
+        try { _ = VideoTranscodeExporter.CreatePlan(source, options); }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "영상 변환 설정 오류",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var dialog = new SaveFileDialog
+        {
+            Title = "압축·회전·반전 영상 MP4 저장",
+            Filter = "MP4 영상 (*.mp4)|*.mp4",
+            DefaultExt = ".mp4",
+            AddExtension = true,
+            FileName = Path.GetFileNameWithoutExtension(source.Path) + "_FrameCut.mp4",
+            OverwritePrompt = true
+        };
+        if (dialog.ShowDialog(this) != true) return;
+        if (File.Exists(dialog.FileName))
+        {
+            MessageBox.Show(this, "기존 파일을 덮어쓸 수 없습니다. 다른 이름으로 저장하세요.",
+                "저장 파일명 중복", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var cts = new CancellationTokenSource();
+        _exportCancel = cts;
+        ExportProgressBar.Value = 0;
+        UpdateControls();
+        var progress = new Progress<VideoTranscodeProgress>(p =>
+        {
+            StatusText.Text = p.Message;
+            if (p.Percent.HasValue) ExportProgressBar.Value = p.Percent.Value;
+        });
+        try
+        {
+            var result = await _transcodeExporter.ExportAsync(
+                source, dialog.FileName, options, progress, cts.Token);
+            ExportProgressBar.Value = 100;
+            StatusText.Text = $"변환 완료 · {result.Width}×{result.Height} · " +
+                $"{result.FileSizeBytes / 1048576.0:0.0} MiB · {result.Encoder}" +
+                (result.HdrPreserved ? " · HDR 유지" : "");
+            MessageBox.Show(this, "완료: " + result.OutputPath +
+                Environment.NewLine + "원본 영상은 변경하지 않았습니다.",
+                "영상 변환 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText.Text = "영상 변환 취소 · 미완성 파일 삭제 완료";
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = "영상 변환 실패: " + ex.Message;
+            MessageBox.Show(this, ex.Message, "영상 변환 실패",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            _exportCancel = null;
+            cts.Dispose();
+            UpdateControls();
+        }
+    }
+
     private void UpdateControls()
     {
         if (ExportButton is null || CancelButton is null) return;
@@ -1386,6 +1515,18 @@ public partial class MainWindow : Window
         FFmpegInstallButton.Content = _ffmpegInstallCancel is null
             ? "FFmpeg 확인 / 설치" : "FFmpeg 설치 중...";
         AddVideoButton.IsEnabled = _ffmpegInstallCancel is null;
+        if (TranscodeExportButton is not null)
+        {
+            var ready = _source is not null && _loadCancel is null &&
+                _exportCancel is null && _ffmpegInstallCancel is null;
+            TranscodeExportButton.IsEnabled = ready && _ffmpegReady;
+            TransformPreviewButton.IsEnabled = ready && _ffmpegReady;
+            RotateLeftButton.IsEnabled = ready;
+            RotateRightButton.IsEnabled = ready;
+            Rotate180Button.IsEnabled = ready;
+            TransformResetButton.IsEnabled = ready;
+            FlipHorizontalCheck.IsEnabled = ready;
+        }
         if (MergeExportButton is not null)
         {
             var idle = _exportCancel is null && _loadCancel is null &&
