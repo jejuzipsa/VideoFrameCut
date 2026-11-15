@@ -177,7 +177,8 @@
                     </StackPanel>
                 </Border>
             </Grid>
-            <StackPanel Grid.Column="2">
+            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+              <StackPanel>
                 <GroupBox x:Name="EditingGroupBox" Header="편집">
                     <StackPanel>
                         <TextBlock Text="자동 분할 간격(초) · 분할 체크한 구간만" Margin="0,0,0,6"
@@ -223,7 +224,38 @@
                                    TextWrapping="Wrap" Foreground="#AFC1D5"/>
                     </StackPanel>
                 </GroupBox>
-            </StackPanel>
+                <GroupBox x:Name="TransformGroupBox" Header="압축 · 회전 · 좌우 반전">
+                  <StackPanel>
+                    <TextBlock Text="압축 방식 (3가지 중 선택)" Foreground="#B7C6D8" Margin="0,0,0,5"/>
+                    <RadioButton x:Name="PresetQualityRadio" GroupName="CompressPreset" Content="① 고화질 유지 · 용량 절약" IsChecked="True" Margin="0,0,0,5"
+                                 ToolTip="원본 해상도·FPS·HDR 유지, HEVC 고화질 인코딩"/>
+                    <RadioButton x:Name="PresetBalancedRadio" GroupName="CompressPreset" Content="② 화질 낮춤 · 용량 절약" Margin="0,0,0,5"
+                                 ToolTip="최대 1080p, 원본 FPS, 음성 유지"/>
+                    <RadioButton x:Name="PresetSmallRadio" GroupName="CompressPreset" Content="③ 영상+음성 압축 · 용량 우선" Margin="0,0,0,12"
+                                 ToolTip="최대 720p, 최대 30fps, AAC 96kbps"/>
+                    <TextBlock Text="화면 회전" Foreground="#B7C6D8" Margin="0,0,0,5"/>
+                    <WrapPanel Margin="0,0,0,7">
+                      <Button x:Name="RotateLeftButton" Content="↶ 90°" Click="RotateLeft_Click" ToolTip="왼쪽 90도"/>
+                      <Button x:Name="RotateRightButton" Content="↷ 90°" Click="RotateRight_Click" ToolTip="오른쪽 90도"/>
+                      <Button x:Name="Rotate180Button" Content="180°" Click="Rotate180_Click"/>
+                    </WrapPanel>
+                    <CheckBox x:Name="FlipHorizontalCheck" Content="좌우 반전" Margin="0,0,0,7"
+                              Checked="FlipHorizontal_Changed" Unchecked="FlipHorizontal_Changed"/>
+                    <TextBlock x:Name="OrientationText" Text="회전 0° · 좌우 반전 안 함" Foreground="#8BD4E4"
+                               TextWrapping="Wrap" Margin="0,0,0,7"/>
+                    <WrapPanel Margin="0,0,0,7">
+                      <Button x:Name="TransformPreviewButton" Content="정지화면 미리보기" Click="TransformPreview_Click"
+                              ToolTip="현재 프레임의 회전·반전 결과 확인. 재생 화면은 원본으로 표시"/>
+                      <Button x:Name="TransformResetButton" Content="초기화" Click="TransformReset_Click"/>
+                    </WrapPanel>
+                    <Button x:Name="TranscodeExportButton" Content="압축·변환 MP4 저장" Click="TranscodeExport_Click"
+                            IsEnabled="False" Background="#246D86" Margin="0"/>
+                    <TextBlock Text="원본 파일 보존 · HEVC(H.265) 출력&#10;HDR 영상은 HDR 정보 유지"
+                               TextWrapping="Wrap" FontSize="11" Foreground="#B7C6D8" Margin="0,7,0,0"/>
+                  </StackPanel>
+                </GroupBox>
+              </StackPanel>
+            </ScrollViewer>
         </Grid>
 
         <Grid Grid.Row="2" Margin="0,12,0,10">
