@@ -68,3 +68,5 @@ jobs:
         run: ffmpeg -version | head -n 1
       - name: Exercise FFmpeg export and verify numbered frames
         run: python3 scripts/test_frame_export.py
+      - name: Verify 3 compression presets, rotation, mirror and HDR
+        run: dotnet run --configuration Release --project tests/VideoFrameCut.Transcode.Tests/VideoFrameCut.Transcode.Tests.csproj
