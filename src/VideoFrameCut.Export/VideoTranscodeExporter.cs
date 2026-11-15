@@ -215,9 +215,10 @@ public sealed class VideoTranscodeExporter
         var inv = CultureInfo.InvariantCulture;
         var args = new List<string> {
             "-hide_banner", "-loglevel", "error", "-nostdin",
-            // Explicit input autorotation: UI rotation is relative to the
-            // correctly-oriented displayed source, not the raw camera pixels.
-            "-autorotate", "-i", source.Path,
+            // FFmpeg autorotation is enabled by default. Do not pass
+            // -autorotate explicitly: FFmpeg 6 and 7 disagree on whether the
+            // option is input/output scoped, which breaks cross-version builds.
+            "-i", source.Path,
             "-map", "0:v:0", "-map_metadata", "-1", "-map_chapters", "-1",
             "-sn", "-dn", "-vf", FilterFor(source, plan),
             "-c:v", encoder
