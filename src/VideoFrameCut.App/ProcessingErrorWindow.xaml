@@ -1,0 +1,74 @@
+<Window x:Class="VideoFrameCut.App.ProcessingErrorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="FrameCut · 처리 오류 상세 정보"
+        Icon="Assets/FrameCut.png"
+        Width="720" Height="530" MinWidth="560" MinHeight="380"
+        WindowStartupLocation="CenterOwner" ResizeMode="CanResize"
+        Background="#151922" Foreground="#E9EDF4"
+        FontFamily="Segoe UI" FontSize="14">
+    <Grid Margin="17">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <TextBlock Grid.Row="0" Text="작업 중 오류가 발생했습니다."
+                   FontSize="19" FontWeight="SemiBold"
+                   Foreground="#F0F4FA" Margin="0,0,0,8"/>
+        <TextBlock x:Name="SummaryText" Grid.Row="1" TextWrapping="Wrap"
+                   Foreground="#C9D8E6" MaxHeight="75"
+                   Margin="0,0,0,12"/>
+        <Grid Grid.Row="2" Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="오류 코드" VerticalAlignment="Center" Margin="0,0,10,0"
+                       FontWeight="SemiBold" Foreground="#E9EDF4"/>
+            <TextBox x:Name="ErrorCodeBox" Grid.Column="1" IsReadOnly="True"
+                     IsTabStop="True" FontFamily="Consolas" FontSize="13"
+                     VerticalContentAlignment="Center"
+                     ToolTip="클릭해서 오류 코드를 직접 선택하거나 복사할 수 있습니다."/>
+            <Button x:Name="CopyCodeButton" Grid.Column="2" Content="코드 복사"
+                    Margin="8,0,0,0" Click="CopyCode_Click"/>
+        </Grid>
+        <Grid Grid.Row="3">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <TextBlock Grid.Row="0" Text="상세 오류 / FFmpeg 메시지"
+                       FontWeight="SemiBold" Foreground="#AEC9DA"
+                       Margin="0,0,0,7"/>
+            <TextBox x:Name="ErrorDetailsBox" Grid.Row="1" IsReadOnly="True"
+                     FontFamily="Consolas" FontSize="12" AcceptsReturn="True"
+                     TextWrapping="NoWrap"
+                     HorizontalScrollBarVisibility="Auto"
+                     VerticalScrollBarVisibility="Auto"
+                     ToolTip="이 영역을 클릭하여 선택 및 Ctrl+C로 복사할 수도 있습니다."/>
+        </Grid>
+        <TextBlock x:Name="LogLocationText" Grid.Row="4" Margin="0,10,0,8"
+                   FontSize="11" Foreground="#B1C2D2"
+                   TextTrimming="CharacterEllipsis"
+                   ToolTip="오류를 나중에 확인할 수 있도록 로컬 로그 파일에도 저장합니다."/>
+        <DockPanel Grid.Row="5" LastChildFill="False">
+            <TextBlock x:Name="CopyStatusText" DockPanel.Dock="Left" Width="235"
+                       Foreground="#8BD4E4" VerticalAlignment="Center"
+                       TextWrapping="Wrap"/>
+            <Button x:Name="CloseErrorButton" DockPanel.Dock="Right"
+                    Content="닫기" MinWidth="90" Margin="8,0,0,0"
+                    Click="CloseError_Click"/>
+            <Button x:Name="OpenLogFolderButton" DockPanel.Dock="Right"
+                    Content="로그 폴더 열기" Margin="8,0,0,0"
+                    Click="OpenLogs_Click"/>
+            <Button x:Name="CopyDetailsButton" DockPanel.Dock="Right"
+                    Content="오류 전체 복사" Background="#246D86"
+                    Margin="8,0,0,0" Click="CopyDetails_Click"/>
+        </DockPanel>
+    </Grid>
+</Window>
