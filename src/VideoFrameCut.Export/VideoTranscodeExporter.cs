@@ -137,35 +137,21 @@ public sealed class VideoTranscodeExporter
             try
             {
                 await RunEncoderAsync(source, plan, pending, encoder, progress, cancellation);
+                await VerifyOutputAsync(source, plan, pending, cancellation);
             }
             catch (OperationCanceledException) { throw; }
-            catch (Exception) // GPU/driver/codec unsupported: retry safely in software.
+            catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException)
             {
+                // Some NVENC builds omit HLG/PQ bitstream tags. A visually
+                // plausible but incorrectly-tagged HDR output is not acceptable:
+                // retry with x265's explicitly configured HDR VUI instead.
                 if (File.Exists(pending)) File.Delete(pending);
                 encoder = "libx265";
                 progress?.Report(new VideoTranscodeProgress(0,
-                    "NVENC 사용이 불가능해 CPU HEVC 인코딩으로 전환합니다."));
+                    "GPU 인코딩/검증 실패 · CPU HEVC로 안전하게 다시 시도합니다."));
                 await RunEncoderAsync(source, plan, pending, encoder, progress, cancellation);
+                await VerifyOutputAsync(source, plan, pending, cancellation);
             }
-
-            cancellation.ThrowIfCancellationRequested();
-            if (!File.Exists(pending) || new FileInfo(pending).Length < 512)
-                throw new InvalidDataException("FFmpeg에서 출력된 MP4 파일을 확인하지 못했습니다.");
-
-            // Verify the finished media (including HDR tags) before publishing.
-            var outputInfo = await new MediaProbe().ProbeAsync(pending, cancellation);
-            if (outputInfo.Codec != "hevc" ||
-                outputInfo.Width != plan.Width || outputInfo.Height != plan.Height)
-                throw new InvalidDataException(
-                    $"출력 영상의 해상도/코덱이 예상과 다릅니다: {outputInfo.Width}×{outputInfo.Height}, {outputInfo.Codec}");
-            if (plan.IsHdr &&
-                (outputInfo.ColorTransfer != source.ColorTransfer ||
-                 outputInfo.ColorPrimaries != "bt2020"))
-                throw new InvalidDataException(
-                    "HDR 색상 정보를 보존하지 못했습니다. 잘못된 색상의 영상을 저장하지 않습니다.");
-            if (options.Preset == CompressionPreset.SmallFile && source.HasAudio &&
-                outputInfo.AudioCodec != "aac")
-                throw new InvalidDataException("음성 압축이 정상적으로 완료되지 않았습니다.");
 
             cancellation.ThrowIfCancellationRequested();
             File.Move(pending, output, overwrite: false);
@@ -178,6 +164,32 @@ public sealed class VideoTranscodeExporter
         {
             try { if (File.Exists(pending)) File.Delete(pending); } catch (IOException) { }
         }
+    }
+
+    private static async Task VerifyOutputAsync(SourceVideoInfo source,
+        VideoTranscodePlan plan, string pending, CancellationToken cancellation)
+    {
+        cancellation.ThrowIfCancellationRequested();
+        if (!File.Exists(pending) || new FileInfo(pending).Length < 512)
+            throw new InvalidDataException("FFmpeg에서 출력된 MP4 파일을 확인하지 못했습니다.");
+
+        var actual = await new MediaProbe().ProbeAsync(pending, cancellation);
+        if (actual.Codec != "hevc" ||
+            actual.Width != plan.Width || actual.Height != plan.Height)
+            throw new InvalidDataException(
+                $"출력 해상도/코덱 불일치: {actual.Width}×{actual.Height}, {actual.Codec}");
+
+        if (plan.IsHdr &&
+            (actual.ColorTransfer != source.ColorTransfer ||
+             actual.ColorPrimaries != "bt2020" ||
+             actual.PixelFormat?.Contains("10", StringComparison.Ordinal) != true))
+            throw new InvalidDataException(
+                "HDR 전송 특성/색역/10비트 보존 검증 실패. 이 파일은 저장하지 않습니다.");
+
+        if (source.HasAudio && actual.AudioCodec != "aac")
+            throw new InvalidDataException("출력 음성 AAC 검증 실패.");
+        if (!source.HasAudio && actual.HasAudio)
+            throw new InvalidDataException("원본에 없는 음성이 추가되었습니다.");
     }
 
     internal static IReadOnlyList<string> Arguments(SourceVideoInfo source,
