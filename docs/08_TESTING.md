@@ -84,3 +84,9 @@ python3 scripts/test_frame_export.py
 ### HEVC MP4 hvc1 호환성 회귀 테스트 (2026-11-15)
 
 모든 압축 프리셋과 HLG HDR 출력에 대해 FFprobe가 `codec_tag_string=hvc1`로 보고하는지 확인합니다. `hev1` 태그 출력을 허용하지 않습니다. 이 테스트는 미리보기 호환성에 필요한 컨테이너 태그 검증이며, 외부 Windows 셸/브라우저의 개별 디코더 설치 여부까지 보증하지 않습니다.
+
+### 인코딩 오류창·로컬 로그 검증 (2026-11-15)
+
+- Windows WPF 스모크 테스트에서 가짜 HEVC/NVENC 인코딩 실패를 기록해 고유 `FC-ENCODE-` 오류 코드, 예외/FFmpeg 메시지, 실제 날짜별 로그 파일 저장 여부를 확인합니다.
+- 새로운 `ProcessingErrorWindow`의 오류 코드 텍스트박스, 전체 오류 상세 텍스트박스, 코드 복사/전체 복사/로그 폴더 열기 버튼을 검사합니다.
+- `ClipExporter`, `VideoMergeExporter`, `VideoTranscodeExporter`의 GPU→CPU 전환 이유와 실제 실패가 기록되며, 영상 분석·분할·병합·변환 실패 UI가 공통 오류창을 사용하는지 Windows 빌드로 확인합니다.

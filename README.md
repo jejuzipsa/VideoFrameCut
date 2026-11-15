@@ -134,3 +134,16 @@ FrameCut은 **LibVLCSharp.WPF 3.10.2**와 **VideoLAN.LibVLC.Windows 3.0.24**를 
 - 이 변경은 해상도, FPS, 화질, 오디오, HLG/PQ HDR 유지 정책을 바꾸지 않습니다. Apple/Windows 계열 미디어 호환성 개선을 의도합니다.
 - **중요:** HEVC 10비트 HDR 디코더가 없는 Windows 또는 브라우저/ComfyUI 미리보기는 `hvc1`만으로 해결되지 않을 수 있습니다. 그 경우 H.264 8비트 SDR 파일이 필요하며, HDR을 SDR로 바꿀 때는 정확한 톤매핑이 필요합니다.
 - 이전에 압축한 파일은 재인코딩 없이 `ffmpeg -i input.mp4 -map 0 -c copy -tag:v hvc1 -movflags +faststart output_hvc1.mp4`로 MP4 태그를 바꿀 수 있습니다. 원본을 덮어쓰지 마세요.
+
+## 인코딩·코덱 오류 확인 및 복사 (2026-11-15)
+
+FrameCut은 **인코딩 실패, 지원하지 않는 코덱, 영상 분석 실패, NVENC 불가, MP4 프레임 검증 실패** 등의 작업 오류가 발생하면 단순 메시지 대신 `FrameCut · 처리 오류 상세 정보` 창을 표시합니다.
+
+- 오류 코드는 `FC-ENCODE-20261115-223715-xxxxxxxx`처럼 작업 종류·날짜·고유 ID를 포함하며 **코드 복사** 버튼으로 복사할 수 있습니다.
+- 오류 창에는 **오류 전체 복사** 버튼도 있습니다. 오류 코드, 시각, 작업명, .NET 예외/HRESULT, FFmpeg 종료 코드와 stderr, 상세 예외 정보를 함께 복사해 개발 이슈로 전달할 수 있습니다.
+- **로그 폴더 열기** 버튼과 앱 상단의 **오류 로그** 버튼이 동일한 폴더를 엽니다.
+- 저장 위치: `%LOCALAPPDATA%\FrameCut\logs\framecut-errors-YYYY-MM-DD.log`. 로컬 전용으로 보관하며 별도 서버로 전송하지 않습니다. 파일 크기별 로그 분할(파일당 약 5MiB), 14일 이전 로그 자동 정리를 적용합니다.
+- GPU NVENC 실패 후 **CPU 인코딩이 성공한 경우에도** GPU가 실패한 상세 원인을 `FALLBACK` 코드로 남깁니다. 잘못 인코딩된 출력 구간은 `framecut_manifest.json`에도 오류가 남습니다.
+- 오류 정보에는 파일 경로나 FFmpeg 메시지가 포함될 수 있으므로, 외부에 공유하기 전에 개인정보가 포함됐는지 검토하세요.
+- 정상적으로 작업을 취소한 경우에는 오류 창을 표시하지 않습니다.
+

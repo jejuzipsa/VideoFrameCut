@@ -3,6 +3,8 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using VideoFrameCut.App;
+using VideoFrameCut.Media;
+using System.IO;
 
 internal static class Program
 {
@@ -25,6 +27,45 @@ internal static class Program
             var window = new MainWindow();
             if (window.FindName("FFmpegInstallButton") is not Button)
                 throw new Exception("FFmpeg first-run installer control not found.");
+            if (window.FindName("OpenLogFolderButton") is not Button)
+                throw new Exception("Processing error logs button missing.");
+            var tempLogs = Path.Combine(Path.GetTempPath(),
+                "FrameCutProcessingErrorTest-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                var diagnostic = ProcessingDiagnostics.Record("ENCODE",
+                    "HEVC 인코딩 불가",
+                    new InvalidOperationException(
+                        "ffmpeg exited with code 1: Unknown encoder 'hevc_nvenc'"),
+                    "입력: sample.mov", tempLogs);
+                if (!diagnostic.Code.StartsWith("FC-ENCODE-") ||
+                    !diagnostic.Details.Contains("Unknown encoder 'hevc_nvenc'") ||
+                    !diagnostic.Details.Contains("HRESULT") ||
+                    diagnostic.SavedLogPath is not { } logPath ||
+                    !File.Exists(logPath) ||
+                    !File.ReadAllText(logPath).Contains(diagnostic.Code))
+                    throw new Exception("Processing error report ID/details or local log failed.");
+
+                var dialog = new ProcessingErrorWindow(diagnostic);
+                if (dialog.FindName("ErrorCodeBox") is not TextBox errorCode ||
+                    dialog.FindName("ErrorDetailsBox") is not TextBox details ||
+                    dialog.FindName("CopyCodeButton") is not Button ||
+                    dialog.FindName("CopyDetailsButton") is not Button ||
+                    dialog.FindName("OpenLogFolderButton") is not Button)
+                    throw new Exception("Copyable error dialog is missing controls.");
+                if (!errorCode.IsReadOnly || !details.IsReadOnly ||
+                    errorCode.Text != diagnostic.Code ||
+                    !details.Text.Contains(diagnostic.Code) ||
+                    !details.Text.Contains("Unknown encoder"))
+                    throw new Exception("Error dialog must expose the exact copyable details.");
+                dialog.Close();
+            }
+            finally
+            {
+                try { if (Directory.Exists(tempLogs)) Directory.Delete(tempLogs, true); }
+                catch (IOException) { }
+            }
+
             if (window.FindName("VideoPreview") is not LibVLCSharp.WPF.VideoView)
                 throw new Exception("Native LibVLC WPF video view was not initialized.");
             if (window.FindName("PreviewVolumePanel") is not Border volumePanel ||
