@@ -36,7 +36,8 @@ public sealed class MediaProbe
             StringProperty(video, "color_primaries"),
             StringProperty(video, "color_space"),
             StringProperty(video, "pix_fmt"),
-            StringProperty(video, "codec_tag_string"));
+            StringProperty(video, "codec_tag_string"),
+            ReadDisplayRotation(video));
     }
 
     public async Task<DisplayFrameIndex> BuildFrameIndexAsync(string path, double? nominalFps = null,
@@ -92,6 +93,47 @@ public sealed class MediaProbe
         if (!int.TryParse(result.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var count) || count < 0)
             throw new InvalidDataException($"Invalid decoded frame count: {result.Trim()}");
         return count;
+    }
+
+    /// <summary>
+    /// FFprobe reports camera/phone orientation in the video stream's
+    /// side_data_list[].rotation (Display Matrix). Older files may only
+    /// provide the stream tags.rotate value. FFmpeg's default -autorotate
+    /// uses this information before our user-selected video filters.
+    /// </summary>
+    private static int ReadDisplayRotation(JsonElement video)
+    {
+        if (video.TryGetProperty("side_data_list", out var sideData) &&
+            sideData.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var data in sideData.EnumerateArray())
+            {
+                if (!string.Equals(StringProperty(data, "side_data_type"),
+                    "Display Matrix", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (ParseDisplayRotation(StringProperty(data, "rotation")) is { } result)
+                    return result;
+            }
+        }
+
+        if (video.TryGetProperty("tags", out var tags) &&
+            tags.ValueKind == JsonValueKind.Object &&
+            ParseDisplayRotation(StringProperty(tags, "rotate")) is { } oldRotation)
+            return oldRotation;
+        return 0;
+    }
+
+    private static int? ParseDisplayRotation(string? value)
+    {
+        if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture,
+            out var degrees) || !double.IsFinite(degrees))
+            return null;
+        // Camera rotation metadata should be a right-angle orientation.
+        // Some muxers encode minor floating-point deviations from 90/180/270.
+        var quarterTurns = Math.Round(degrees / 90.0);
+        if (Math.Abs(degrees - quarterTurns * 90) > 1)
+            return null;
+        return (((int)quarterTurns % 4) + 4) % 4 * 90;
     }
 
     private static string? StringProperty(JsonElement item, string name)

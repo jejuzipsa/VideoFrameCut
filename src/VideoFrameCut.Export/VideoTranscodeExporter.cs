@@ -53,22 +53,30 @@ public sealed class VideoTranscodeExporter
                 "회전은 0°, 90°, 180°, 270°만 지원합니다.");
         if (source.Width <= 0 || source.Height <= 0)
             throw new ArgumentException("원본 영상의 해상도가 올바르지 않습니다.");
+        // FFmpeg -autorotate applies the display matrix BEFORE -vf. A 4K
+        // landscape-coded phone video may actually display as portrait.
+        // Preset scaling and final output verification must use displayed
+        // dimensions, never the unrotated coded stream dimensions.
+        var orientedWidth = source.DisplayRotationDegrees is 90 or 270
+            ? source.Height : source.Width;
+        var orientedHeight = source.DisplayRotationDegrees is 90 or 270
+            ? source.Width : source.Height;
         var (maxW, maxH, cq, crf) = options.Preset switch
         {
-            CompressionPreset.HighQuality => (source.Width, source.Height, 19, 20),
-            CompressionPreset.Balanced when source.Width >= source.Height =>
+            CompressionPreset.HighQuality => (orientedWidth, orientedHeight, 19, 20),
+            CompressionPreset.Balanced when orientedWidth >= orientedHeight =>
                 (1920, 1080, 24, 24),
             CompressionPreset.Balanced => (1080, 1920, 24, 24),
-            CompressionPreset.SmallFile when source.Width >= source.Height =>
+            CompressionPreset.SmallFile when orientedWidth >= orientedHeight =>
                 (1280, 720, 28, 28),
             CompressionPreset.SmallFile => (720, 1280, 28, 28),
             _ => throw new ArgumentOutOfRangeException(nameof(options))
         };
         // A max bounding box NEVER upscales an already smaller source.
         var factor = Math.Min(1.0, Math.Min(
-            maxW / (double)source.Width, maxH / (double)source.Height));
-        var width = Math.Max(2, 2 * (int)Math.Floor(source.Width * factor / 2));
-        var height = Math.Max(2, 2 * (int)Math.Floor(source.Height * factor / 2));
+            maxW / (double)orientedWidth, maxH / (double)orientedHeight));
+        var width = Math.Max(2, 2 * (int)Math.Floor(orientedWidth * factor / 2));
+        var height = Math.Max(2, 2 * (int)Math.Floor(orientedHeight * factor / 2));
         if (options.RotationDegrees is 90 or 270)
             (width, height) = (height, width);
 
@@ -93,7 +101,11 @@ public sealed class VideoTranscodeExporter
         var targetW = plan.RotationDegrees is 90 or 270 ? plan.Height : plan.Width;
         var targetH = plan.RotationDegrees is 90 or 270 ? plan.Width : plan.Height;
         var filters = new List<string>();
-        if (targetW != source.Width || targetH != source.Height)
+        var orientedWidth = source.DisplayRotationDegrees is 90 or 270
+            ? source.Height : source.Width;
+        var orientedHeight = source.DisplayRotationDegrees is 90 or 270
+            ? source.Width : source.Height;
+        if (targetW != orientedWidth || targetH != orientedHeight)
             filters.Add($"scale={targetW}:{targetH}:flags=lanczos");
         if (plan.FramesPerSecond.HasValue)
             filters.Add($"fps={plan.FramesPerSecond.Value}");
@@ -177,9 +189,12 @@ public sealed class VideoTranscodeExporter
 
         var actual = await new MediaProbe().ProbeAsync(pending, cancellation);
         if (actual.Codec != "hevc" || actual.CodecTag != "hvc1" ||
-            actual.Width != plan.Width || actual.Height != plan.Height)
+            actual.Width != plan.Width || actual.Height != plan.Height ||
+            actual.DisplayRotationDegrees != 0)
             throw new InvalidDataException(
-                $"출력 해상도/코덱 태그 불일치: {actual.Width}×{actual.Height}, {actual.Codec}/{actual.CodecTag}");
+                $"출력 해상도/코덱 태그 불일치: 실제 {actual.Width}×{actual.Height}, " +
+                $"예상 {plan.Width}×{plan.Height}, {actual.Codec}/{actual.CodecTag}, " +
+                $"출력 회전 태그 {actual.DisplayRotationDegrees}° (원본 회전 {source.DisplayRotationDegrees}°)");
 
         if (plan.IsHdr &&
             (actual.ColorTransfer != source.ColorTransfer ||
@@ -200,7 +215,9 @@ public sealed class VideoTranscodeExporter
         var inv = CultureInfo.InvariantCulture;
         var args = new List<string> {
             "-hide_banner", "-loglevel", "error", "-nostdin",
-            "-i", source.Path,
+            // Explicit input autorotation: UI rotation is relative to the
+            // correctly-oriented displayed source, not the raw camera pixels.
+            "-autorotate", "-i", source.Path,
             "-map", "0:v:0", "-map_metadata", "-1", "-map_chapters", "-1",
             "-sn", "-dn", "-vf", FilterFor(source, plan),
             "-c:v", encoder

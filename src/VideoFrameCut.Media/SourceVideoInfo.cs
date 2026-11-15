@@ -13,4 +13,7 @@ public sealed record SourceVideoInfo(
     string? ColorPrimaries = null,
     string? ColorSpace = null,
     string? PixelFormat = null,
-    string? CodecTag = null);
+    string? CodecTag = null,
+    // FFprobe stream display matrix / legacy rotate tag. Clockwise/counterclockwise
+    // sign is irrelevant for width/height but is retained for diagnostics.
+    int DisplayRotationDegrees = 0);
