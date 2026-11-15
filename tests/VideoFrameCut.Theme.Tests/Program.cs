@@ -67,6 +67,31 @@ internal static class Program
                 throw new Exception("VLC video overlays were not loaded.");
             if (window.Icon is null || window.Icon.Width < 16)
                 throw new Exception("Film-scissors WPF window icon is missing or invalid.");
+            if (window.FindName("TransformGroupBox") is not GroupBox transformGroup ||
+                window.FindName("PresetQualityRadio") is not RadioButton qualityMode ||
+                window.FindName("PresetBalancedRadio") is not RadioButton balancedMode ||
+                window.FindName("PresetSmallRadio") is not RadioButton smallMode)
+                throw new Exception("Three compression presets are missing from the editing panel.");
+            if (qualityMode.IsChecked != true || balancedMode.IsChecked == true ||
+                smallMode.IsChecked == true)
+                throw new Exception("High-quality preservation must be the default preset.");
+            if (window.FindName("RotateLeftButton") is not Button ||
+                window.FindName("RotateRightButton") is not Button ||
+                window.FindName("Rotate180Button") is not Button ||
+                window.FindName("TransformPreviewButton") is not Button ||
+                window.FindName("TransformResetButton") is not Button ||
+                window.FindName("TranscodeExportButton") is not Button ||
+                window.FindName("FlipHorizontalCheck") is not CheckBox mirror ||
+                window.FindName("OrientationText") is not TextBlock)
+                throw new Exception("Rotation, mirror, still preview or MP4 conversion controls are missing.");
+            if (mirror.IsChecked == true)
+                throw new Exception("Horizontal flip must be off by default.");
+            if (window.FindName("AudioCheck") is not CheckBox existingOutputAudio ||
+                existingOutputAudio.IsChecked != true)
+                throw new Exception("Original cut/merge audio policy must remain unchanged.");
+            transformGroup.ApplyTemplate();
+            if (transformGroup.Template.FindName("GroupHeaderArea", transformGroup) is not Border)
+                throw new Exception("Compression panel must use the readable dark group header.");
             if (window.FindName("MergeQueue") is not ListBox mergeQueue)
                 throw new Exception("Cross-source merge queue was not initialized.");
             if (window.FindName("MergeTransitionCombo") is not ComboBox mergeMode ||

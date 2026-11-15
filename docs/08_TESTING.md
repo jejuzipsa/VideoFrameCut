@@ -67,3 +67,16 @@ python3 scripts/test_frame_export.py
 - 원본 선택은 디코딩된 프레임 번호 `[start,end)` 기준이고, 병합 규격만 첫 원본의 해상도와 정수 FPS로 통일합니다.
 - 페이드 시간은 0.1~3초(기본 0.5초), 짧은 구간에는 전환 시간을 더 짧게 지정해야 합니다.
 - Windows에서는 WPF 병합 작업 목록/다크 ComboBox 로딩과 설치 EXE 빌드도 확인합니다.
+
+## 영상 압축·회전·좌우 반전 통합 테스트 (2026-11-15)
+
+`tests/VideoFrameCut.Transcode.Tests` (Ubuntu CI):
+
+- 4색 사분면 영상(60fps, AAC) 생성 후 FFmpeg+libx265 실제 MP4 3종 출력.
+- 원본 해상도·FPS 유지/1080p 상한/720p·30fps 상한·AAC 압축 규칙 검증.
+- **결과 영상 디코딩 픽셀**로 90°+좌우 반전, 좌우 반전 단독, 180° 회전 색상 배치 검증.
+- HLG 영상의 10비트 픽셀 포맷·BT.2020 primaries·HLG transfer를 재인코딩 뒤 다시 FFprobe로 확인.
+- 원본 해시 불변·원본 파일 덮어쓰기 거부 확인.
+- Windows WPF smoke test는 세 압축 프리셋, 회전/반전 조작, 전환 버튼 및 기존 오디오 체크 유지 여부를 검사합니다.
+
+**실기기 점검:** Windows RTX NVENC에서 HLG/PQ HEVC 출력, 실제 4K 장시간 작업의 열/성능, 4K 고 DPI 화면의 오른쪽 스크롤/라디오버튼 배치.
