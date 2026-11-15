@@ -24,6 +24,48 @@
             <Setter Property="Padding" Value="9,5"/>
             <Setter Property="Background" Value="#29394B"/>
         </Style>
+        <!-- The checked border represents the actual rotation, not stale focus. -->
+        <Style x:Key="RotationButtonStyle" TargetType="{x:Type ToggleButton}">
+            <Setter Property="Background" Value="#34465B"/>
+            <Setter Property="Foreground" Value="#F0F4FA"/>
+            <Setter Property="BorderBrush" Value="#4B6077"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="12,7"/>
+            <Setter Property="Margin" Value="0,0,8,0"/>
+            <Setter Property="MinHeight" Value="34"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ToggleButton}">
+                        <Border x:Name="RotationButtonSurface"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="5" SnapsToDevicePixels="True">
+                            <ContentPresenter ContentSource="Content" RecognizesAccessKey="True"
+                                              Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="RotationButtonSurface" Property="Background" Value="#3C4E63"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="RotationButtonSurface" Property="Background" Value="#245D76"/>
+                                <Setter TargetName="RotationButtonSurface" Property="BorderBrush" Value="#8BD4E4"/>
+                                <Setter TargetName="RotationButtonSurface" Property="BorderThickness" Value="2"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="RotationButtonSurface" Property="Background" Value="#252D3A"/>
+                                <Setter Property="Opacity" Value="0.55"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Grid Margin="16">
@@ -226,18 +268,114 @@
                 </GroupBox>
                 <GroupBox x:Name="TransformGroupBox" Header="압축 · 회전 · 좌우 반전">
                   <StackPanel>
-                    <TextBlock Text="압축 방식 (3가지 중 선택)" Foreground="#B7C6D8" Margin="0,0,0,5"/>
-                    <RadioButton x:Name="PresetQualityRadio" GroupName="CompressPreset" Content="① 고화질 유지 · 용량 절약" IsChecked="True" Margin="0,0,0,5"
-                                 ToolTip="원본 해상도·FPS·HDR 유지, HEVC 고화질 인코딩"/>
-                    <RadioButton x:Name="PresetBalancedRadio" GroupName="CompressPreset" Content="② 화질 낮춤 · 용량 절약" Margin="0,0,0,5"
-                                 ToolTip="최대 1080p, 원본 FPS, 음성 유지"/>
-                    <RadioButton x:Name="PresetSmallRadio" GroupName="CompressPreset" Content="③ 영상+음성 압축 · 용량 우선" Margin="0,0,0,12"
-                                 ToolTip="최대 720p, 최대 30fps, AAC 96kbps"/>
+                    <TextBlock Text="압축 방식 (3가지 중 선택)" Foreground="#B7C6D8" Margin="0,0,0,7"/>
+                    <Grid Margin="0,0,0,7">
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                      </Grid.ColumnDefinitions>
+                      <RadioButton x:Name="PresetQualityRadio" GroupName="CompressPreset" IsChecked="True"
+                                   VerticalAlignment="Center" HorizontalAlignment="Stretch">
+                        <TextBlock Text="① 고화질 유지 · 용량 절약" TextWrapping="Wrap"/>
+                      </RadioButton>
+                      <Border x:Name="PresetQualityHelp" Grid.Column="1" Width="22" Height="22"
+                              Margin="7,0,0,0" VerticalAlignment="Center"
+                              Background="#30485D" BorderBrush="#7494AD" BorderThickness="1"
+                              CornerRadius="11" Cursor="Help"
+                              ToolTipService.InitialShowDelay="250"
+                              ToolTipService.ShowDuration="45000">
+                        <Border.ToolTip>
+                          <ToolTip MaxWidth="330" Background="#202C3B"
+                                   BorderBrush="#718EA5" BorderThickness="1" Padding="12">
+                            <StackPanel>
+                              <TextBlock Text="① 고화질 유지 · 용량 절약" FontWeight="Bold"
+                                         Foreground="#F0F4FA" Margin="0,0,0,7"/>
+                              <TextBlock Text="원본 해상도, FPS, HLG/HDR 정보를 유지합니다.&#10;H.265(HEVC) 고화질 압축을 사용합니다.&#10;원본이 AAC 음성이면 복사하고, 아니면 AAC 160kbps로 변환합니다.&#10;&#10;화질 차이를 최소화하지만 완전 무손실은 아닙니다. 이미 압축된 원본은 용량이 줄지 않거나 오히려 커질 수 있습니다." Foreground="#D6E3F0"
+                                         TextWrapping="Wrap"/>
+                            </StackPanel>
+                          </ToolTip>
+                        </Border.ToolTip>
+                        <TextBlock Text="?" FontWeight="Bold" FontSize="13"
+                                   Foreground="#E3F2FD" HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                      </Border>
+                    </Grid>
+                    <Grid Margin="0,0,0,7">
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                      </Grid.ColumnDefinitions>
+                      <RadioButton x:Name="PresetBalancedRadio" GroupName="CompressPreset"
+                                   VerticalAlignment="Center" HorizontalAlignment="Stretch">
+                        <TextBlock Text="② 화질 낮춤 · 용량 절약" TextWrapping="Wrap"/>
+                      </RadioButton>
+                      <Border x:Name="PresetBalancedHelp" Grid.Column="1" Width="22" Height="22"
+                              Margin="7,0,0,0" VerticalAlignment="Center"
+                              Background="#30485D" BorderBrush="#7494AD" BorderThickness="1"
+                              CornerRadius="11" Cursor="Help"
+                              ToolTipService.InitialShowDelay="250"
+                              ToolTipService.ShowDuration="45000">
+                        <Border.ToolTip>
+                          <ToolTip MaxWidth="330" Background="#202C3B"
+                                   BorderBrush="#718EA5" BorderThickness="1" Padding="12">
+                            <StackPanel>
+                              <TextBlock Text="② 균형 압축 · 용량 절약" FontWeight="Bold"
+                                         Foreground="#F0F4FA" Margin="0,0,0,7"/>
+                              <TextBlock Text="최대 1920×1080(세로 영상은 1080×1920)으로 낮춥니다.&#10;원본 FPS는 유지합니다.&#10;AAC 음성은 그대로 복사하며, AAC가 아니면 160kbps로 변환합니다.&#10;&#10;4K 영상을 작게 만들 때 권장합니다. 원본이 1080p 이하라면 해상도를 키우지 않습니다. HDR 정보는 보존합니다." Foreground="#D6E3F0"
+                                         TextWrapping="Wrap"/>
+                            </StackPanel>
+                          </ToolTip>
+                        </Border.ToolTip>
+                        <TextBlock Text="?" FontWeight="Bold" FontSize="13"
+                                   Foreground="#E3F2FD" HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                      </Border>
+                    </Grid>
+                    <Grid Margin="0,0,0,12">
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                      </Grid.ColumnDefinitions>
+                      <RadioButton x:Name="PresetSmallRadio" GroupName="CompressPreset"
+                                   VerticalAlignment="Center" HorizontalAlignment="Stretch">
+                        <TextBlock Text="③ 영상+음성 압축 · 용량 우선" TextWrapping="Wrap"/>
+                      </RadioButton>
+                      <Border x:Name="PresetSmallHelp" Grid.Column="1" Width="22" Height="22"
+                              Margin="7,0,0,0" VerticalAlignment="Center"
+                              Background="#30485D" BorderBrush="#7494AD" BorderThickness="1"
+                              CornerRadius="11" Cursor="Help"
+                              ToolTipService.InitialShowDelay="250"
+                              ToolTipService.ShowDuration="45000">
+                        <Border.ToolTip>
+                          <ToolTip MaxWidth="330" Background="#202C3B"
+                                   BorderBrush="#718EA5" BorderThickness="1" Padding="12">
+                            <StackPanel>
+                              <TextBlock Text="③ 용량 우선 · 영상 및 음성 압축" FontWeight="Bold"
+                                         Foreground="#F0F4FA" Margin="0,0,0,7"/>
+                              <TextBlock Text="최대 1280×720(세로 영상은 720×1280)으로 낮춥니다.&#10;60fps 등 높은 FPS는 최대 30fps로 낮춥니다.&#10;음성은 AAC 96kbps로 다시 압축합니다.&#10;&#10;가장 작은 파일을 목표로 하지만 화면 디테일, 빠른 움직임과 음질이 저하될 수 있습니다. HDR 정보는 보존합니다." Foreground="#D6E3F0"
+                                         TextWrapping="Wrap"/>
+                            </StackPanel>
+                          </ToolTip>
+                        </Border.ToolTip>
+                        <TextBlock Text="?" FontWeight="Bold" FontSize="13"
+                                   Foreground="#E3F2FD" HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                      </Border>
+                    </Grid>
                     <TextBlock Text="화면 회전" Foreground="#B7C6D8" Margin="0,0,0,5"/>
                     <WrapPanel Margin="0,0,0,7">
-                      <Button x:Name="RotateLeftButton" Content="↶ 90°" Click="RotateLeft_Click" ToolTip="왼쪽 90도"/>
-                      <Button x:Name="RotateRightButton" Content="↷ 90°" Click="RotateRight_Click" ToolTip="오른쪽 90도"/>
-                      <Button x:Name="Rotate180Button" Content="180°" Click="Rotate180_Click"/>
+                      <ToggleButton x:Name="RotateLeftButton" Content="↶ 90°"
+                                    Style="{StaticResource RotationButtonStyle}"
+                                    Click="RotateLeft_Click"
+                                    ToolTip="왼쪽 90° 회전 · 다시 누르면 회전 해제"/>
+                      <ToggleButton x:Name="RotateRightButton" Content="↷ 90°"
+                                    Style="{StaticResource RotationButtonStyle}"
+                                    Click="RotateRight_Click"
+                                    ToolTip="오른쪽 90° 회전 · 다시 누르면 회전 해제"/>
+                      <ToggleButton x:Name="Rotate180Button" Content="180°"
+                                    Style="{StaticResource RotationButtonStyle}"
+                                    Click="Rotate180_Click"
+                                    ToolTip="180° 회전 · 다시 누르면 0°로 돌아갑니다"/>
                     </WrapPanel>
                     <CheckBox x:Name="FlipHorizontalCheck" Content="좌우 반전" Margin="0,0,0,7"
                               Checked="FlipHorizontal_Changed" Unchecked="FlipHorizontal_Changed"/>
