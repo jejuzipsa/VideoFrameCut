@@ -201,6 +201,15 @@ public sealed class VideoTranscodeExporter
                 plan.TenBit ? "yuv420p10le" : "yuv420p" });
 
         if (plan.TenBit) args.AddRange(new[] { "-profile:v", "main10" });
+        if (plan.IsHdr && encoder == "libx265")
+        {
+            // x265 reads color VUI from its own encoder parameters. Merely
+            // passing -color_trc to FFmpeg does not always set the HEVC bitstream
+            // VUI; the resulting MP4 may otherwise report 'unknown' for HLG/PQ.
+            var transfer = source.ColorTransfer == "smpte2084" ? "16" : "18";
+            args.AddRange(new[] { "-x265-params",
+                $"colorprim=9:transfer={transfer}:colormatrix=9" });
+        }
         if (plan.IsHdr)
         {
             // Avoid 8-bit SDR conversion of HLG / PQ. 10-bit BT.2020 is kept
