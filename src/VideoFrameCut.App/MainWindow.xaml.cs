@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -108,6 +109,46 @@ public partial class MainWindow : Window
         // VideoView must be loaded before attaching the native player HWND.
         VideoPreview.Loaded += VideoPreview_Loaded;
         UpdateControls();
+    }
+
+    // Unlike a normal MessageBox, this offers the actual FFmpeg error,
+    // exception type/HRESULT, stack trace and a copyable unique report code.
+    // Logs stay under the user's LocalAppData, not beside source videos.
+    private void ShowProcessingError(string category, string operation,
+        Exception ex, string? context = null)
+    {
+        var report = ProcessingDiagnostics.Record(category, operation, ex, context);
+        StatusText.Text = $"{operation} 실패 · 오류 코드 {report.Code}";
+        try
+        {
+            new ProcessingErrorWindow(report) { Owner = this }.ShowDialog();
+        }
+        catch (Exception dialogException)
+        {
+            // A broken error dialog must never hide the original failure.
+            ProcessingDiagnostics.Record("UI", "오류 창 표시", dialogException);
+            MessageBox.Show(this, $"{operation}: {ex.Message}\n\n오류 코드: {report.Code}" +
+                $"\n로그 폴더: {report.LogDirectory}",
+                "FrameCut 처리 오류", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void OpenLogFolder_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Directory.CreateDirectory(ProcessingDiagnostics.LogDirectory);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = ProcessingDiagnostics.LogDirectory,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+            or System.ComponentModel.Win32Exception)
+        {
+            ShowProcessingError("LOG", "로그 폴더 열기", ex);
+        }
     }
 
     // VLC volume belongs to preview playback only; FFmpeg exports retain
@@ -247,11 +288,8 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             StatusText.Text = "FFmpeg 자동 설치 실패. 'FFmpeg 설치' 버튼으로 재시도하세요.";
-            MessageBox.Show(this,
-                "FFmpeg 자동 설치에 실패했습니다. 네트워크 또는 설치 폴더의 쓰기 권한을 확인하세요." +
-                Environment.NewLine + Environment.NewLine + ex.Message,
-                "FrameCut · FFmpeg 설치 실패",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
+            ShowProcessingError("INSTALL", "FFmpeg 자동 설치", ex,
+                "FFmpeg/FFprobe 다운로드 또는 파일 검증 중 실패");
         }
         finally
         {
@@ -290,9 +328,7 @@ public partial class MainWindow : Window
             UnauthorizedAccessException or System.Runtime.InteropServices.COMException)
         {
             StatusText.Text = "파일 선택창에서 영상 경로를 확인하지 못했습니다.";
-            MessageBox.Show(this, "파일 선택창에서 경로를 열 수 없습니다.\n" +
-                "실제 영상 파일을 선택하거나, 파일 탐색기에서 복사한 경로를 붙여넣어 주세요.\n\n" +
-                ex.Message, "영상 파일 선택 오류", MessageBoxButton.OK, MessageBoxImage.Warning);
+            ShowProcessingError("IMPORT", "영상 파일 선택", ex);
         }
     }
 
@@ -463,13 +499,16 @@ public partial class MainWindow : Window
                 catch (OperationCanceledException) { throw; }
                 catch (Exception ex)
                 {
+                    ProcessingDiagnostics.Record("PROBE", "영상 분석 및 프레임 인덱싱",
+                        ex, $"원본 파일: {path}");
                     errors.Add($"{Path.GetFileName(path)}: {ex.Message}");
                 }
             }
 
             if (errors.Count > 0)
-                MessageBox.Show(this, string.Join(Environment.NewLine, errors),
-                    "일부 영상 추가 실패", MessageBoxButton.OK, MessageBoxImage.Warning);
+                ShowProcessingError("IMPORT", "영상 추가",
+                    new InvalidDataException(string.Join(Environment.NewLine, errors)),
+                    "원본 영상 중 일부를 분석할 수 없었습니다. 개별 오류도 로그에 기록되었습니다.");
         }
         catch (OperationCanceledException)
         {
@@ -560,6 +599,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             PlaybackError("LibVLC 재생 엔진을 불러오지 못했습니다: " + ex.Message);
+            ProcessingDiagnostics.Record("PREVIEW", "LibVLC 엔진 초기화", ex);
         }
     }
 
@@ -588,6 +628,8 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             PlaybackError("VLC 원본 미리보기 오류: " + ex.Message);
+            ProcessingDiagnostics.Record("PREVIEW", "VLC 원본 미리보기", ex,
+                $"원본: {source.Path}");
         }
     }
 
@@ -983,7 +1025,7 @@ public partial class MainWindow : Window
             }
             else StatusText.Text = "선택한 구간이 분할 간격보다 짧거나 추가할 분할 경계가 없습니다. 다른 구간은 변경되지 않았습니다.";
         }
-        catch (Exception ex) { MessageBox.Show(this, ex.Message, "분할 실패"); }
+        catch (Exception ex) { ShowProcessingError("SPLIT", "구간 시간 분할", ex); }
     }
 
     private void Undo_Click(object sender, RoutedEventArgs e)
@@ -1171,7 +1213,11 @@ public partial class MainWindow : Window
             StatusText.Text = $"원본 표시 프레임 {frame:N0} (FFmpeg 정확한 디코딩)";
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { StatusText.Text = $"정확한 미리보기 실패: {ex.Message}"; }
+        catch (Exception ex)
+        {
+            ShowProcessingError("PREVIEW", "정확한 프레임 미리보기", ex,
+                $"원본: {sourcePath}, 프레임: {frame}");
+        }
     }
 
     private async void Export_Click(object sender, RoutedEventArgs e)
@@ -1205,12 +1251,19 @@ public partial class MainWindow : Window
             var succeeded = report.Clips.Count(c => c.Succeeded);
             StatusText.Text = $"출력 검증 완료: 성공 {succeeded} / 요청 {clips.Count}. framecut_manifest.json 확인";
             if (succeeded != clips.Count)
-                MessageBox.Show(this, "일부 구간이 실패했습니다. 출력 폴더의 framecut_manifest.json을 확인하세요.",
-                    "결과 확인", MessageBoxButton.OK, MessageBoxImage.Warning);
+            {
+                var failed = report.Clips.Where(c => !c.Succeeded)
+                    .Select(c => $"{c.OutputName}: {c.Error ?? "알 수 없는 오류"}");
+                ShowProcessingError("ENCODE", "선택 구간 MP4 출력",
+                    new InvalidDataException(string.Join(Environment.NewLine, failed)),
+                    $"요청: {clips.Count}, 성공: {succeeded}, 결과 폴더: {dialog.FolderName}\n" +
+                    "framecut_manifest.json도 확인하세요.");
+            }
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, ex.Message, "출력 오류", MessageBoxButton.OK, MessageBoxImage.Error);
+            ShowProcessingError("ENCODE", "선택 구간 MP4 출력", ex,
+                $"원본: {source.Path}, 결과 폴더: {dialog.FolderName}");
         }
         finally
         {
@@ -1318,8 +1371,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, ex.Message, "병합 설정 확인",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
+            ShowProcessingError("MERGE", "병합 설정 검증", ex);
             return;
         }
 
@@ -1368,8 +1420,8 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             StatusText.Text = "영상 병합 실패: " + ex.Message;
-            MessageBox.Show(this, ex.Message, "병합 실패",
-                MessageBoxButton.OK, MessageBoxImage.Error);
+            ShowProcessingError("MERGE", "영상 병합", ex,
+                $"출력 파일: {dialog.FileName}, 구간 수: {ordered.Length}");
         }
         finally
         {
@@ -1452,8 +1504,7 @@ public partial class MainWindow : Window
         try { _ = VideoTranscodeExporter.CreatePlan(source, options); }
         catch (Exception ex)
         {
-            MessageBox.Show(this, ex.Message, "영상 변환 설정 오류",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
+            ShowProcessingError("TRANSCODE", "영상 변환 설정", ex);
             return;
         }
 
@@ -1502,8 +1553,9 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             StatusText.Text = "영상 변환 실패: " + ex.Message;
-            MessageBox.Show(this, ex.Message, "영상 변환 실패",
-                MessageBoxButton.OK, MessageBoxImage.Error);
+            ShowProcessingError("TRANSCODE", "영상 압축·회전·반전", ex,
+                $"원본: {source.Path}\n출력: {dialog.FileName}\n" +
+                $"압축 방식: {preset}, 회전: {_rotationDegrees}°, 좌우 반전: {options.FlipHorizontal}");
         }
         finally
         {
