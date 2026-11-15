@@ -1380,13 +1380,15 @@ public partial class MainWindow : Window
     }
 
 
-    private void RotateLeft_Click(object sender, RoutedEventArgs e) => RotateBy(-90);
-    private void RotateRight_Click(object sender, RoutedEventArgs e) => RotateBy(90);
-    private void Rotate180_Click(object sender, RoutedEventArgs e) => RotateBy(180);
+    // These are exclusive orientation toggles, not cumulative rotation.
+    // Choosing the active angle a second time resets to the original 0°.
+    private void RotateLeft_Click(object sender, RoutedEventArgs e) => ToggleRotation(270);
+    private void RotateRight_Click(object sender, RoutedEventArgs e) => ToggleRotation(90);
+    private void Rotate180_Click(object sender, RoutedEventArgs e) => ToggleRotation(180);
 
-    private void RotateBy(int angle)
+    private void ToggleRotation(int requestedAngle)
     {
-        _rotationDegrees = (_rotationDegrees + angle + 360) % 360;
+        _rotationDegrees = _rotationDegrees == requestedAngle ? 0 : requestedAngle;
         UpdateTransformPreview();
     }
 
@@ -1402,8 +1404,17 @@ public partial class MainWindow : Window
 
     private void UpdateTransformPreview()
     {
-        if (ExactStill is null || FlipHorizontalCheck is null || OrientationText is null)
+        if (ExactStill is null || FlipHorizontalCheck is null ||
+            OrientationText is null || RotateLeftButton is null ||
+            RotateRightButton is null || Rotate180Button is null)
             return;
+
+        // Checked borders must exactly match the selected output orientation.
+        // In particular, clicking 180° twice clears its checked border.
+        RotateLeftButton.IsChecked = _rotationDegrees == 270;
+        RotateRightButton.IsChecked = _rotationDegrees == 90;
+        Rotate180Button.IsChecked = _rotationDegrees == 180;
+
         var mirrored = FlipHorizontalCheck.IsChecked == true;
         var transform = new TransformGroup();
         // The exported FFmpeg filter also rotates before screen-horizontal flip.
