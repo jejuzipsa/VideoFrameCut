@@ -80,6 +80,9 @@ public partial class MainWindow : Window
     private bool _playWhenReady;
     private bool _playing;
     private bool _clipEnded;
+    private bool _previewVolumeUiReady;
+    private int _previewVolume = 50;
+    private bool _previewMuted;
     private bool _updatingSlider;
     private bool _suppressSourceSelection;
     private bool _suppressClipSelection;
@@ -87,6 +90,10 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        _previewVolume = LoadPreviewVolume();
+        _previewVolumeUiReady = true;
+        PreviewVolumeSlider.Value = _previewVolume;
+        UpdatePreviewVolumeUi();
         SourceList.ItemsSource = _sources;
         ClipGrid.ItemsSource = _rows;
         MergeQueue.ItemsSource = _mergeQueue;
@@ -98,6 +105,82 @@ public partial class MainWindow : Window
         // VideoView must be loaded before attaching the native player HWND.
         VideoPreview.Loaded += VideoPreview_Loaded;
         UpdateControls();
+    }
+
+    // VLC volume belongs to preview playback only; FFmpeg exports retain
+    // their original audio settings and are not routed through this control.
+    private static string PreviewVolumePreferencePath =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "FrameCut", "preview-volume.txt");
+
+    private static int LoadPreviewVolume()
+    {
+        try
+        {
+            if (File.Exists(PreviewVolumePreferencePath) &&
+                int.TryParse(File.ReadAllText(PreviewVolumePreferencePath),
+                    NumberStyles.Integer, CultureInfo.InvariantCulture, out var volume) &&
+                volume is >= 0 and <= 100)
+                return volume;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        return 50;
+    }
+
+    private void SavePreviewVolume()
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(PreviewVolumePreferencePath)!);
+            File.WriteAllText(PreviewVolumePreferencePath,
+                _previewVolume.ToString(CultureInfo.InvariantCulture));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+    }
+
+    private void PreviewVolumeSlider_ValueChanged(object sender,
+        RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (!_previewVolumeUiReady) return;
+        _previewVolume = Math.Clamp((int)Math.Round(e.NewValue), 0, 100);
+        // Dragging a muted slider to a positive value should restore sound.
+        if (_previewVolume > 0) _previewMuted = false;
+        ApplyPreviewAudioVolume();
+        UpdatePreviewVolumeUi();
+    }
+
+    private void PreviewMute_Click(object sender, RoutedEventArgs e)
+    {
+        if (_previewVolume == 0)
+        {
+            _previewVolume = 50;
+            _previewMuted = false;
+            PreviewVolumeSlider.Value = 50;
+        }
+        else
+        {
+            _previewMuted = !_previewMuted;
+        }
+        ApplyPreviewAudioVolume();
+        UpdatePreviewVolumeUi();
+    }
+
+    private void ApplyPreviewAudioVolume()
+    {
+        if (_vlcPlayer is null) return;
+        _vlcPlayer.Volume = _previewVolume;
+        _vlcPlayer.Mute = _previewMuted || _previewVolume == 0;
+    }
+
+    private void UpdatePreviewVolumeUi()
+    {
+        if (PreviewVolumeSlider is null || PreviewMuteButton is null || PreviewVolumeText is null)
+            return;
+        PreviewVolumeText.Text = $"{_previewVolume}%";
+        var muted = _previewMuted || _previewVolume == 0;
+        PreviewMuteButton.Content = muted ? "🔇" : "🔊";
+        PreviewMuteButton.ToolTip = muted
+            ? "미리보기 음소거 해제" : "미리보기 음소거";
     }
 
     private static bool IsVideoFile(string path) => VideoSourceSelection.IsVideoFile(path);
@@ -464,6 +547,7 @@ public partial class MainWindow : Window
             _vlcPlayer.EncounteredError += VlcPlayer_EncounteredError;
             _vlcPlayer.EndReached += VlcPlayer_EndReached;
             VideoPreview.MediaPlayer = _vlcPlayer;
+            ApplyPreviewAudioVolume();
             if (_activeSource is { } source)
                 PreparePlayback(source);
         }
@@ -508,6 +592,7 @@ public partial class MainWindow : Window
         {
             if (_vlcPlayer is null || _activeSource is null || _playbackReady) return;
             _playbackReady = true;
+            ApplyPreviewAudioVolume();
             _vlcPlayer.SetPause(true);
             SeekMediaToFrame((int)Math.Round(SeekSlider.Value));
             PlaybackNotice.Visibility = Visibility.Collapsed;
@@ -1364,6 +1449,7 @@ public partial class MainWindow : Window
 
     private void Window_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
+        SavePreviewVolume();
         _loadCancel?.Cancel();
         _exportCancel?.Cancel();
         _previewCancel?.Cancel();

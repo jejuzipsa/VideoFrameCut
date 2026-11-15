@@ -294,26 +294,39 @@
         <Setter Property="CellStyle" Value="{StaticResource DarkDataGridCellStyle}"/>
     </Style>
 
+    <!-- Dedicated header and content rows prevent content from overlapping
+         or clipping the header at high DPI and small GroupBox heights. -->
     <Style TargetType="{x:Type GroupBox}">
         <Setter Property="Background" Value="{StaticResource WindowDarkBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource TextDarkBrush}"/>
         <Setter Property="BorderBrush" Value="{StaticResource BorderDarkBrush}"/>
         <Setter Property="Margin" Value="0,0,0,12"/>
-        <Setter Property="Padding" Value="12,15,12,12"/>
+        <Setter Property="Padding" Value="12,7,12,11"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type GroupBox}">
-                    <Grid SnapsToDevicePixels="True">
-                        <Border Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="1" CornerRadius="6" Margin="0,10,0,0"/>
-                        <Border Background="{StaticResource WindowDarkBrush}"
-                                HorizontalAlignment="Left" VerticalAlignment="Top"
-                                Margin="12,0,0,0" Padding="7,0">
-                            <ContentPresenter ContentSource="Header" RecognizesAccessKey="True"/>
-                        </Border>
-                        <ContentPresenter ContentSource="Content" Margin="{TemplateBinding Padding}"/>
-                    </Grid>
+                    <Border x:Name="GroupSurface" Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1"
+                            CornerRadius="6" SnapsToDevicePixels="True">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <Border x:Name="GroupHeaderArea" Grid.Row="0"
+                                    Background="#202C3B" Padding="11,6,11,6"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="0,0,0,1" CornerRadius="5,5,0,0">
+                                <ContentPresenter ContentSource="Header"
+                                                  RecognizesAccessKey="True"
+                                                  VerticalAlignment="Center"
+                                                  TextElement.FontWeight="SemiBold"/>
+                            </Border>
+                            <ContentPresenter x:Name="GroupContentArea" Grid.Row="1"
+                                              ContentSource="Content"
+                                              Margin="{TemplateBinding Padding}"/>
+                        </Grid>
+                    </Border>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>

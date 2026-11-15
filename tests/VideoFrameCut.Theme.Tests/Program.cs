@@ -27,6 +27,30 @@ internal static class Program
                 throw new Exception("FFmpeg first-run installer control not found.");
             if (window.FindName("VideoPreview") is not LibVLCSharp.WPF.VideoView)
                 throw new Exception("Native LibVLC WPF video view was not initialized.");
+            if (window.FindName("PreviewVolumePanel") is not Border volumePanel ||
+                window.FindName("PreviewMuteButton") is not Button ||
+                window.FindName("PreviewVolumeSlider") is not Slider volumeSlider ||
+                window.FindName("PreviewVolumeText") is not TextBlock)
+                throw new Exception("VLC preview-only speaker, slider and percent display missing.");
+            if (volumePanel.HorizontalAlignment != HorizontalAlignment.Right ||
+                volumePanel.VerticalAlignment != VerticalAlignment.Bottom ||
+                volumeSlider.Minimum != 0 || volumeSlider.Maximum != 100)
+                throw new Exception("Preview volume should be anchored bottom-right and clamped to 0-100.");
+            if (volumeSlider.Value is < 0 or > 100)
+                throw new Exception("Previously saved preview volume is outside the supported range.");
+            // Separate header row prevents clipped GroupBox titles at 4K / DPI scaling.
+            foreach (var groupName in new[] {
+                "SourceGroupBox", "EditingGroupBox", "OutputGroupBox",
+                "ClipsGroupBox", "MergeGroupBox" })
+            {
+                if (window.FindName(groupName) is not GroupBox group)
+                    throw new Exception("GroupBox missing: " + groupName);
+                group.ApplyTemplate();
+                if (group.Template.FindName("GroupHeaderArea", group) is not Border header ||
+                    group.Template.FindName("GroupContentArea", group) is not ContentPresenter body ||
+                    Grid.GetRow(header) == Grid.GetRow(body))
+                    throw new Exception("GroupBox header and content overlap: " + groupName);
+            }
             if (window.FindName("PlaybackNotice") is not Border ||
                 window.FindName("ExactStill") is not Image)
                 throw new Exception("VLC video overlays were not loaded.");

@@ -55,7 +55,7 @@
                 <ColumnDefinition Width="3*"/>
                 <ColumnDefinition Width="1.45*"/>
             </Grid.ColumnDefinitions>
-            <GroupBox Grid.Column="0" Header="① 원본 영상 목록" Margin="0,0,12,0">
+            <GroupBox x:Name="SourceGroupBox" Grid.Column="0" Header="① 원본 영상 목록" Margin="0,0,12,0">
                 <DockPanel LastChildFill="True">
                     <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
                         <Border x:Name="SourceDropZone" AllowDrop="True"
@@ -124,6 +124,35 @@
                                                TextAlignment="Center" TextWrapping="Wrap"
                                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
+                                <!-- Preview-only volume, inside VideoView.Content to stay
+                                     visible above LibVLC's native HWND. -->
+                                <Border x:Name="PreviewVolumePanel" HorizontalAlignment="Right"
+                                        VerticalAlignment="Bottom" Margin="0,0,12,12"
+                                        Padding="7,4" CornerRadius="6" Background="#D8202938"
+                                        BorderBrush="#59758D" BorderThickness="1"
+                                        Panel.ZIndex="5">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Button x:Name="PreviewMuteButton" Content="🔊"
+                                                FontFamily="Segoe UI Emoji" FontSize="17"
+                                                Width="34" Height="29" MinWidth="34" Padding="0"
+                                                Margin="0,0,4,0" ToolTip="미리보기 음소거 / 해제"
+                                                Click="PreviewMute_Click"/>
+                                        <Slider x:Name="PreviewVolumeSlider" Width="102"
+                                                Minimum="0" Maximum="100" Value="50"
+                                                VerticalAlignment="Center"
+                                                IsMoveToPointEnabled="True"
+                                                TickFrequency="1"
+                                                AutoToolTipPlacement="TopLeft"
+                                                AutoToolTipPrecision="0"
+                                                ValueChanged="PreviewVolumeSlider_ValueChanged"
+                                                ToolTip="영상 미리보기 음량만 조절 (출력에 영향 없음)"/>
+                                        <TextBlock x:Name="PreviewVolumeText" Text="50%"
+                                                   Width="37" Margin="7,0,0,0"
+                                                   TextAlignment="Right" VerticalAlignment="Center"
+                                                   Foreground="#E8F4FD" FontWeight="SemiBold"
+                                                   FontSize="12"/>
+                                    </StackPanel>
+                                </Border>
                             </Grid>
                         </vlc:VideoView>
                     </Grid>
@@ -149,7 +178,7 @@
                 </Border>
             </Grid>
             <StackPanel Grid.Column="2">
-                <GroupBox Header="편집">
+                <GroupBox x:Name="EditingGroupBox" Header="편집">
                     <StackPanel>
                         <TextBlock Text="자동 분할 간격(초)" Margin="0,0,0,6"/>
                         <DockPanel>
@@ -182,7 +211,7 @@
                                 ToolTip="서로 다른 원본 영상의 구간도 순서대로 추가할 수 있습니다."/>
                     </StackPanel>
                 </GroupBox>
-                <GroupBox Header="출력 설정">
+                <GroupBox x:Name="OutputGroupBox" Header="출력 설정">
                     <StackPanel>
                         <CheckBox x:Name="AudioCheck" Content="원본 오디오 유지" IsChecked="True" Margin="0,0,0,8"/>
                         <CheckBox x:Name="CpuCheck" Content="CPU 인코더 사용 (libx264)" Margin="0,0,0,8"/>
@@ -216,7 +245,7 @@
                 <ColumnDefinition Width="2.05*"/>
                 <ColumnDefinition Width="1*"/>
             </Grid.ColumnDefinitions>
-            <GroupBox Grid.Column="0" Header="② 분할 구간 목록 (Ctrl/Shift로 여러 개 선택)">
+            <GroupBox x:Name="ClipsGroupBox" Grid.Column="0" Header="② 분할 구간 목록 (Ctrl/Shift로 여러 개 선택)">
             <DataGrid x:Name="ClipGrid" AutoGenerateColumns="False" CanUserAddRows="False"
                       SelectionMode="Extended" SelectionUnit="FullRow" IsReadOnly="False"
                       SelectionChanged="ClipGrid_SelectionChanged"
@@ -243,7 +272,7 @@
                 </DataGrid.Columns>
             </DataGrid>
             </GroupBox>
-            <GroupBox Grid.Column="1" Header="③ 병합 작업 · 구간 순서 지정" Margin="12,0,0,0">
+            <GroupBox x:Name="MergeGroupBox" Grid.Column="1" Header="③ 병합 작업 · 구간 순서 지정" Margin="12,0,0,0">
                 <DockPanel LastChildFill="True">
                     <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
                         <WrapPanel Margin="0,0,0,4">
