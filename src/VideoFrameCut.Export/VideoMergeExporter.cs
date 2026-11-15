@@ -144,9 +144,11 @@ public sealed class VideoMergeExporter
                 await ComposeAsync(segments, plan, settings, outputPartial, encoder, cancellation);
             }
             catch (OperationCanceledException) { throw; }
-            catch (Exception) when (settings.Encoding == EncodingMode.Auto &&
+            catch (Exception ex) when (settings.Encoding == EncodingMode.Auto &&
                 encoder == "h264_nvenc")
             {
+                ProcessingDiagnostics.Record("FALLBACK", "병합 H.264 NVENC 실패 → CPU 재시도",
+                    ex, $"출력: {path}\n병합 구간 수: {clips.Count}");
                 encoder = "libx264";
                 if (File.Exists(outputPartial)) File.Delete(outputPartial);
                 progress?.Report(new VideoMergeProgress(clips.Count, clips.Count + 2,

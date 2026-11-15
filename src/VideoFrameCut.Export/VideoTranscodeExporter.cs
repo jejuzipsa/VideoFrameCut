@@ -142,6 +142,8 @@ public sealed class VideoTranscodeExporter
             catch (OperationCanceledException) { throw; }
             catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException)
             {
+                ProcessingDiagnostics.Record("FALLBACK", "압축 HEVC NVENC 실패 → CPU 재시도",
+                    ex, $"원본: {source.Path}\n출력: {output}\n프리셋: {options.Preset}");
                 // Some NVENC builds omit HLG/PQ bitstream tags. A visually
                 // plausible but incorrectly-tagged HDR output is not acceptable:
                 // retry with x265's explicitly configured HDR VUI instead.

@@ -62,8 +62,10 @@ public sealed class ClipExporter
                     await EncodeAsync(source, index, clip.SourceRange, pending, settings, encoder, cancellation);
                 }
                 catch (OperationCanceledException) { throw; }
-                catch (Exception) when (settings.Encoding == EncodingMode.Auto && encoder == "h264_nvenc")
+                catch (Exception ex) when (settings.Encoding == EncodingMode.Auto && encoder == "h264_nvenc")
                 {
+                    ProcessingDiagnostics.Record("FALLBACK", "구간 H.264 NVENC 실패 → CPU 재시도",
+                        ex, $"원본: {source.Path}\n구간: {name}");
                     DeleteTemporary(pending);
                     encoder = "libx264";
                     progress?.Report(new ExportProgress(i, selected.Length, name, "NVENC failed; retrying with CPU"));
@@ -88,6 +90,8 @@ public sealed class ClipExporter
             catch (Exception ex)
             {
                 error = ex.Message;
+                ProcessingDiagnostics.Record("ENCODE", "구간 MP4 출력 실패", ex,
+                    $"원본: {source.Path}\n구간: {name}\n인코더: {encoder}");
                 DeleteTemporary(pending);
             }
             results.Add(new ClipExportResult(i + 1, clip.SourceRange.Start, clip.SourceRange.End,

@@ -1253,7 +1253,7 @@ public partial class MainWindow : Window
             if (succeeded != clips.Count)
             {
                 var failed = report.Clips.Where(c => !c.Succeeded)
-                    .Select(c => $"{c.OutputName}: {c.Error ?? "알 수 없는 오류"}");
+                    .Select(c => $"{c.OutputFile}: {c.Error ?? "알 수 없는 오류"}");
                 ShowProcessingError("ENCODE", "선택 구간 MP4 출력",
                     new InvalidDataException(string.Join(Environment.NewLine, failed)),
                     $"요청: {clips.Count}, 성공: {succeeded}, 결과 폴더: {dialog.FolderName}\n" +
