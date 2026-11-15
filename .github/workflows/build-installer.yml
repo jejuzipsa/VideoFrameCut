@@ -13,9 +13,11 @@ on:
 permissions:
   contents: write
 
+# Only the latest source should produce the tracked installer EXE.
+# Older builds may otherwise push an outdated installer after a new commit.
 concurrency:
   group: framecut-installer-main
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build-installer:
