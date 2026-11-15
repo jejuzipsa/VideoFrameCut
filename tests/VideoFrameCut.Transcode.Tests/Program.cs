@@ -86,6 +86,67 @@ try
         "Standalone horizontal mirror placed image quadrants incorrectly");
     Console.WriteLine("PASS three compression presets with original audio and AAC recompression");
 
+    // Camera MOVs often store landscape pixels (e.g. 3840x2160) but a
+    // 90-degree display matrix, so they must be planned as portrait BEFORE
+    // applying the user's chosen 180-degree/90-degree output rotation.
+    var metadataRotated = Path.Combine(root, "phone-rotated.mov");
+    await FfProcess.CaptureAsync("ffmpeg", new[] {
+        "-nostdin", "-v", "error",
+        "-display_rotation", "90",
+        "-i", sourcePath,
+        "-map", "0", "-c", "copy",
+        "-y", metadataRotated
+    });
+    var phone = await probe.ProbeAsync(metadataRotated);
+    Check(phone.Width == 160 && phone.Height == 92 &&
+        phone.DisplayRotationDegrees is 90 or 270,
+        "Phone MOV display matrix should be reported by ffprobe as a 90-degree rotation.");
+
+    var phonePlan = VideoTranscodeExporter.CreatePlan(phone,
+        new VideoTransformOptions(CompressionPreset.HighQuality, 180));
+    Check((phonePlan.Width, phonePlan.Height) == (92, 160),
+        "Display-rotated phone 160x92 + 180° must produce 92x160, not 160x92.");
+
+    // Simulate the exact 3840x2160 camera file from the screenshot.
+    var landscapeWithDisplayRotation = landscape4k with
+    {
+        DisplayRotationDegrees = phone.DisplayRotationDegrees
+    };
+    var rotated4kPlan = VideoTranscodeExporter.CreatePlan(
+        landscapeWithDisplayRotation,
+        new VideoTransformOptions(CompressionPreset.HighQuality, 180));
+    Check((rotated4kPlan.Width, rotated4kPlan.Height) == (2160, 3840),
+        "4K landscape-coded MOV with a 90° display matrix should output portrait 2160x3840.");
+    var rotated1080pPlan = VideoTranscodeExporter.CreatePlan(
+        landscapeWithDisplayRotation,
+        new VideoTransformOptions(CompressionPreset.Balanced, 180));
+    Check((rotated1080pPlan.Width, rotated1080pPlan.Height) == (1080, 1920),
+        "Balanced preset must scale the displayed portrait, not the raw encoded landscape.");
+    var rotatedRight90Plan = VideoTranscodeExporter.CreatePlan(
+        landscapeWithDisplayRotation,
+        new VideoTransformOptions(CompressionPreset.HighQuality, 90));
+    Check((rotatedRight90Plan.Width, rotatedRight90Plan.Height) == (3840, 2160),
+        "A further 90° user rotation should switch portrait display back to landscape.");
+
+    var metadataUnrotated = Path.Combine(root, "phone-orientation-normal.mp4");
+    var normalPhone = await exporter.ExportAsync(phone, metadataUnrotated,
+        new VideoTransformOptions(CompressionPreset.HighQuality));
+    Check((normalPhone.Width, normalPhone.Height) == (92, 160),
+        "MOV metadata autorotation must be included in output dimensions.");
+    var referenceCorners = await Corners(metadataUnrotated, 92, 160);
+    var correctedPhone = Path.Combine(root, "phone-orientation-180.mp4");
+    var corrected = await exporter.ExportAsync(phone, correctedPhone,
+        new VideoTransformOptions(CompressionPreset.HighQuality, 180));
+    var correctedInfo = await probe.ProbeAsync(correctedPhone);
+    Check((correctedInfo.Width, correctedInfo.Height) == (92, 160) &&
+        correctedInfo.DisplayRotationDegrees == 0 &&
+        correctedInfo.CodecTag == "hvc1",
+        "Metadata-rotated MOV output must be portrait, hvc1, with no stale rotation tags.");
+    var correctedCorners = await Corners(correctedPhone, 92, 160);
+    Check(correctedCorners.SequenceEqual(referenceCorners.Reverse()),
+        "The user-selected 180° must rotate the already-display-oriented MOV frames.");
+    Console.WriteLine("PASS MOV display-matrix autorotation, 4K planning and 180° user rotation");
+
     var invertedFile = Path.Combine(root, "rotated-180.mp4");
     await exporter.ExportAsync(info, invertedFile,
         new VideoTransformOptions(CompressionPreset.HighQuality, 180));
