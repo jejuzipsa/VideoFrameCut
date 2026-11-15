@@ -75,15 +75,56 @@ internal static class Program
             if (qualityMode.IsChecked != true || balancedMode.IsChecked == true ||
                 smallMode.IsChecked == true)
                 throw new Exception("High-quality preservation must be the default preset.");
-            if (window.FindName("RotateLeftButton") is not Button ||
-                window.FindName("RotateRightButton") is not Button ||
-                window.FindName("Rotate180Button") is not Button ||
+            if (window.FindName("RotateLeftButton") is not ToggleButton rotateLeft ||
+                window.FindName("RotateRightButton") is not ToggleButton rotateRight ||
+                window.FindName("Rotate180Button") is not ToggleButton rotate180 ||
                 window.FindName("TransformPreviewButton") is not Button ||
                 window.FindName("TransformResetButton") is not Button ||
                 window.FindName("TranscodeExportButton") is not Button ||
                 window.FindName("FlipHorizontalCheck") is not CheckBox mirror ||
                 window.FindName("OrientationText") is not TextBlock)
                 throw new Exception("Rotation, mirror, still preview or MP4 conversion controls are missing.");
+            if (window.FindName("PresetQualityHelp") is not Border qualityHelp ||
+                window.FindName("PresetBalancedHelp") is not Border balancedHelp ||
+                window.FindName("PresetSmallHelp") is not Border smallHelp)
+                throw new Exception("Three compression help question-mark badges are missing.");
+            foreach (var help in new[] { qualityHelp, balancedHelp, smallHelp })
+            {
+                if (help.ToolTip is not ToolTip tooltip ||
+                    tooltip.Content is not StackPanel panel ||
+                    panel.Children.OfType<TextBlock>().Count() < 2)
+                    throw new Exception("Each preset needs a detailed dark hover tooltip.");
+                if (tooltip.MaxWidth < 290)
+                    throw new Exception("Compression tooltip does not have enough readable width.");
+            }
+
+            // Calling the rotation Click routed event must update both the
+            // output orientation and ToggleButton.IsChecked, even on re-click.
+            var orientation = (TextBlock)window.FindName("OrientationText");
+            rotateLeft.IsEnabled = true;
+            rotateRight.IsEnabled = true;
+            rotate180.IsEnabled = true;
+            rotate180.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent, rotate180));
+            if (rotate180.IsChecked != true || rotateLeft.IsChecked == true ||
+                rotateRight.IsChecked == true || !orientation.Text.Contains("180°"))
+                throw new Exception("180° should be the only active rotation.");
+            rotate180.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent, rotate180));
+            if (rotate180.IsChecked == true || rotateLeft.IsChecked == true ||
+                rotateRight.IsChecked == true || !orientation.Text.Contains("0°"))
+                throw new Exception("Second 180° click must clear the selection and reset to 0°.");
+            rotateLeft.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent, rotateLeft));
+            if (rotateLeft.IsChecked != true || !orientation.Text.Contains("270°"))
+                throw new Exception("Left 90° should become 270° clockwise.");
+            rotateRight.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent, rotateRight));
+            if (rotateRight.IsChecked != true || rotateLeft.IsChecked == true ||
+                !orientation.Text.Contains("90°"))
+                throw new Exception("Switching to right 90° must clear the old left selection.");
+            rotateRight.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent, rotateRight));
+            if (rotateRight.IsChecked == true || !orientation.Text.Contains("0°"))
+                throw new Exception("Second right 90° click must clear the selected border.");
+            rotate180.ApplyTemplate();
+            if (rotate180.Template.FindName("RotationButtonSurface", rotate180) is not Border)
+                throw new Exception("Rotation template should be driven by IsChecked, not focused state.");
             if (mirror.IsChecked == true)
                 throw new Exception("Horizontal flip must be off by default.");
             if (window.FindName("AudioCheck") is not CheckBox existingOutputAudio ||
