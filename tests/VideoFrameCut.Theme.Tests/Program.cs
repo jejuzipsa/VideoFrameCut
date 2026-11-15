@@ -57,9 +57,9 @@ internal static class Program
                 if (window.FindName(groupName) is not GroupBox group)
                     throw new Exception("GroupBox missing: " + groupName);
                 group.ApplyTemplate();
-                if (group.Template.FindName("GroupHeaderArea", group) is not Border header ||
+                if (group.Template.FindName("GroupHeaderArea", group) is not Border groupHeader ||
                     group.Template.FindName("GroupContentArea", group) is not ContentPresenter body ||
-                    Grid.GetRow(header) == Grid.GetRow(body))
+                    Grid.GetRow(groupHeader) == Grid.GetRow(body))
                     throw new Exception("GroupBox header and content overlap: " + groupName);
             }
             if (window.FindName("PlaybackNotice") is not Border ||
