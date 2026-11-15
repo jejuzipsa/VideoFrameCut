@@ -38,6 +38,17 @@ internal static class Program
                 throw new Exception("Preview volume should be anchored bottom-right and clamped to 0-100.");
             if (volumeSlider.Value is < 0 or > 100)
                 throw new Exception("Previously saved preview volume is outside the supported range.");
+            var muteControl = (Button)window.FindName("PreviewMuteButton");
+            var volumeText = (TextBlock)window.FindName("PreviewVolumeText");
+            volumeSlider.Value = 25;
+            if (volumeText.Text != "25%")
+                throw new Exception("Preview volume slider must update its numeric label.");
+            muteControl.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            if (muteControl.Content?.ToString() != "🔇")
+                throw new Exception("Preview mute button does not toggle to muted.");
+            volumeSlider.Value = 40;
+            if (muteControl.Content?.ToString() != "🔊" || volumeText.Text != "40%")
+                throw new Exception("Dragging the volume slider must restore preview audio.");
             // Separate header row prevents clipped GroupBox titles at 4K / DPI scaling.
             foreach (var groupName in new[] {
                 "SourceGroupBox", "EditingGroupBox", "OutputGroupBox",
