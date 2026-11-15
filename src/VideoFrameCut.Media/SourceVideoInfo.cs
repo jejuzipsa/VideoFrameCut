@@ -12,4 +12,5 @@ public sealed record SourceVideoInfo(
     string? ColorTransfer = null,
     string? ColorPrimaries = null,
     string? ColorSpace = null,
-    string? PixelFormat = null);
+    string? PixelFormat = null,
+    string? CodecTag = null);

@@ -174,10 +174,10 @@ public sealed class VideoTranscodeExporter
             throw new InvalidDataException("FFmpeg에서 출력된 MP4 파일을 확인하지 못했습니다.");
 
         var actual = await new MediaProbe().ProbeAsync(pending, cancellation);
-        if (actual.Codec != "hevc" ||
+        if (actual.Codec != "hevc" || actual.CodecTag != "hvc1" ||
             actual.Width != plan.Width || actual.Height != plan.Height)
             throw new InvalidDataException(
-                $"출력 해상도/코덱 불일치: {actual.Width}×{actual.Height}, {actual.Codec}");
+                $"출력 해상도/코덱 태그 불일치: {actual.Width}×{actual.Height}, {actual.Codec}/{actual.CodecTag}");
 
         if (plan.IsHdr &&
             (actual.ColorTransfer != source.ColorTransfer ||
@@ -247,7 +247,11 @@ public sealed class VideoTranscodeExporter
                 "-fps_mode:v", "cfr" });
         else
             args.AddRange(new[] { "-fps_mode:v", "passthrough" });
-        args.AddRange(new[] { "-movflags", "+faststart",
+        // FFmpeg defaults to the HEVC MP4 sample entry 'hev1'. Windows
+        // thumbnail handlers and Apple-oriented media consumers commonly
+        // expect 'hvc1' instead. Unlike re-encoding this only changes the
+        // sample-description identifier; preserve the original HDR/10-bit data.
+        args.AddRange(new[] { "-tag:v", "hvc1", "-movflags", "+faststart",
             "-metadata:s:v:0", "rotate=0", "-progress", "pipe:1", "-nostats",
             "-y", target });
         return args;

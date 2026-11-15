@@ -35,7 +35,8 @@ public sealed class MediaProbe
             StringProperty(video, "color_transfer"),
             StringProperty(video, "color_primaries"),
             StringProperty(video, "color_space"),
-            StringProperty(video, "pix_fmt"));
+            StringProperty(video, "pix_fmt"),
+            StringProperty(video, "codec_tag_string"));
     }
 
     public async Task<DisplayFrameIndex> BuildFrameIndexAsync(string path, double? nominalFps = null,

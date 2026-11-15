@@ -125,3 +125,12 @@ FrameCut은 **LibVLCSharp.WPF 3.10.2**와 **VideoLAN.LibVLC.Windows 3.0.24**를 
 - 예: `A 60초 / B 26초`에서 A의 '분할'만 체크하고 25초 실행 → `A 25초, A 25초, A 10초, B 26초`; B는 ID, 길이, 출력 상태 모두 보존됩니다.
 - 여러 구간에 '분할' 체크를 하면 각각의 구간 시작부터 독립적으로 계산합니다. 기존 삭제 경계를 넘지 않습니다.
 - 한 번의 시간 분할은 하나의 Undo/Redo 작업이며 원본 영상 파일을 변경하지 않습니다.
+
+### Windows/ComfyUI 영상 미리보기: HEVC `hvc1` 출력 개선 (2026-11-15)
+
+제보 영상(`_001_FrameCut.mp4`)에서 **FFmpeg는 전체 906프레임을 오류 없이 디코딩**했지만, MP4의 영상 샘플 태그가 `hev1`이고 10비트 HLG HDR HEVC라는 사실을 확인했습니다. 이는 파일 손상과 별개로 Windows 셸/브라우저의 미리보기가 지원하지 않을 수 있는 조합입니다.
+
+- 압축 엔진은 HEVC MP4를 생성할 때 기본 `hev1` 대신 **`-tag:v hvc1`**을 지정합니다. 저장 전 FFprobe를 통해 실제 출력 태그가 `hvc1`인지 확인합니다.
+- 이 변경은 해상도, FPS, 화질, 오디오, HLG/PQ HDR 유지 정책을 바꾸지 않습니다. Apple/Windows 계열 미디어 호환성 개선을 의도합니다.
+- **중요:** HEVC 10비트 HDR 디코더가 없는 Windows 또는 브라우저/ComfyUI 미리보기는 `hvc1`만으로 해결되지 않을 수 있습니다. 그 경우 H.264 8비트 SDR 파일이 필요하며, HDR을 SDR로 바꿀 때는 정확한 톤매핑이 필요합니다.
+- 이전에 압축한 파일은 재인코딩 없이 `ffmpeg -i input.mp4 -map 0 -c copy -tag:v hvc1 -movflags +faststart output_hvc1.mp4`로 MP4 태그를 바꿀 수 있습니다. 원본을 덮어쓰지 마세요.

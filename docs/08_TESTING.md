@@ -80,3 +80,7 @@ python3 scripts/test_frame_export.py
 - Windows WPF smoke test는 세 압축 프리셋, 회전/반전 조작, 전환 버튼 및 기존 오디오 체크 유지 여부를 검사합니다.
 
 **실기기 점검:** Windows RTX NVENC에서 HLG/PQ HEVC 출력, 실제 4K 장시간 작업의 열/성능, 4K 고 DPI 화면의 오른쪽 스크롤/라디오버튼 배치.
+
+### HEVC MP4 hvc1 호환성 회귀 테스트 (2026-11-15)
+
+모든 압축 프리셋과 HLG HDR 출력에 대해 FFprobe가 `codec_tag_string=hvc1`로 보고하는지 확인합니다. `hev1` 태그 출력을 허용하지 않습니다. 이 테스트는 미리보기 호환성에 필요한 컨테이너 태그 검증이며, 외부 Windows 셸/브라우저의 개별 디코더 설치 여부까지 보증하지 않습니다.

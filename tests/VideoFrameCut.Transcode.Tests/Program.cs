@@ -58,6 +58,8 @@ try
     var qualityFile = Path.Combine(root, "high.mp4");
     var high = await exporter.ExportAsync(info, qualityFile,
         new VideoTransformOptions(CompressionPreset.HighQuality));
+    Check((await probe.ProbeAsync(qualityFile)).CodecTag == "hvc1",
+        "High-quality output must use hvc1 for MP4 thumbnail compatibility.");
     Check(high.Width == 160 && high.Height == 92 && high.FileSizeBytes > 0,
         "High quality should not upscale or destroy pixels");
     Check((await probe.ProbeAsync(qualityFile)).AudioCodec == "aac",
@@ -76,6 +78,8 @@ try
     var small = await exporter.ExportAsync(info, smallFile,
         new VideoTransformOptions(CompressionPreset.SmallFile, 0, true));
     var smallInfo = await probe.ProbeAsync(smallFile);
+    Check(smallInfo.CodecTag == "hvc1",
+        "Small-file output must not use FFmpeg's incompatible default hev1 tag.");
     Check(smallInfo.NominalFramesPerSecond is > 29 and < 31 &&
         smallInfo.AudioCodec == "aac", "Small preset must cap 60fps at 30fps and encode AAC");
     Check(string.Join(',', await Corners(smallFile, 160, 92)) == "green,red,yellow,blue",
@@ -106,6 +110,7 @@ try
         Path.Combine(root, "hlg-output.mp4"),
         new VideoTransformOptions(CompressionPreset.SmallFile));
     var hlgOutput = await probe.ProbeAsync(hlgResult.OutputPath);
+    Check(hlgOutput.CodecTag == "hvc1", "HDR HLG MP4 should use hvc1.");
     Check(hlgResult.HdrPreserved && hlgOutput.ColorTransfer == "arib-std-b67" &&
           hlgOutput.ColorPrimaries == "bt2020" &&
           hlgOutput.PixelFormat?.Contains("10", StringComparison.Ordinal) == true,
