@@ -7,6 +7,7 @@ namespace VideoFrameCut.App;
 public sealed class ClipRow : INotifyPropertyChanged
 {
     private bool _exportEnabled;
+    private bool _splitTarget;
 
     public Guid Id { get; }
     public int Number { get; }
@@ -25,6 +26,21 @@ public sealed class ClipRow : INotifyPropertyChanged
             _exportEnabled = value;
             OnPropertyChanged();
             ExportChanged?.Invoke(this, value);
+        }
+    }
+
+    /// <summary>
+    /// Independent UI-only mark for automatic time splitting.
+    /// This MUST NOT change the export checkbox or source/edit history.
+    /// </summary>
+    public bool SplitTarget
+    {
+        get => _splitTarget;
+        set
+        {
+            if (_splitTarget == value) return;
+            _splitTarget = value;
+            OnPropertyChanged();
         }
     }
 

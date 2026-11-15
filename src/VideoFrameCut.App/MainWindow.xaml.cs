@@ -698,6 +698,7 @@ public partial class MainWindow : Window
     private void RefreshRows(Guid? preferredId = null, bool chooseAtPlayhead = false)
     {
         var cursor = (int)Math.Round(SeekSlider.Value);
+        var markedIds = _rows.Where(row => row.SplitTarget).Select(row => row.Id).ToHashSet();
         _suppressClipSelection = true;
         _rows.Clear();
         if (_editor is not null && _index is not null)
@@ -705,7 +706,10 @@ public partial class MainWindow : Window
             var number = 1;
             foreach (var segment in _editor.Segments)
             {
-                var row = new ClipRow(number++, segment, _index);
+                var row = new ClipRow(number++, segment, _index)
+                {
+                    SplitTarget = markedIds.Contains(segment.Id)
+                };
                 row.ExportChanged += Row_ExportChanged;
                 _rows.Add(row);
             }
@@ -931,7 +935,7 @@ public partial class MainWindow : Window
 
     private void AutoSplit_Click(object sender, RoutedEventArgs e)
     {
-        if (_editor is null) return;
+        if (_editor is null || _loadCancel is not null || _exportCancel is not null) return;
         if (!double.TryParse(SplitSecondsBox.Text, NumberStyles.Float,
                 CultureInfo.CurrentCulture, out var seconds) &&
             !double.TryParse(SplitSecondsBox.Text, NumberStyles.Float,
@@ -941,10 +945,37 @@ public partial class MainWindow : Window
             return;
         }
 
+        // A checked "분할" checkbox wins over highlighted rows. When there
+        // are no checked targets, a highlighted row selection is supported.
+        // Never fall back to the whole source or "출력" checkbox state.
+        var checkedIds = _rows.Where(row => row.SplitTarget)
+            .Select(row => row.Id).ToArray();
+        var targetIds = checkedIds.Length > 0
+            ? checkedIds
+            : ClipGrid.SelectedItems.Cast<ClipRow>()
+                .Select(row => row.Id).Distinct().ToArray();
+        if (targetIds.Length == 0)
+        {
+            StatusText.Text = "분할할 구간을 아래 '분할' 열에서 체크하거나 행을 선택하세요. 전체 구간은 자동 분할하지 않습니다.";
+            return;
+        }
+
         try
         {
-            if (_editor.SplitByTime(seconds)) RefreshRows(chooseAtPlayhead: true);
-            else StatusText.Text = "현재 구간에 추가할 분할 경계가 없습니다.";
+            var previousCount = _editor.Segments.Count;
+            if (_editor.SplitByTime(seconds, targetIds))
+            {
+                // Split-target checks are one-shot; do not automatically mark
+                // the new child segments for another split on the next click.
+                foreach (var row in _rows)
+                    if (targetIds.Contains(row.Id)) row.SplitTarget = false;
+
+                var addedCount = _editor.Segments.Count - previousCount;
+                RefreshRows(chooseAtPlayhead: true);
+                StatusText.Text = $"선택한 {targetIds.Length}개 구간만 {seconds:0.###}초 간격으로 분할했습니다. " +
+                    $"새 구간 {addedCount}개 추가 · 나머지 구간 및 출력 체크 유지.";
+            }
+            else StatusText.Text = "선택한 구간이 분할 간격보다 짧거나 추가할 분할 경계가 없습니다. 다른 구간은 변경되지 않았습니다.";
         }
         catch (Exception ex) { MessageBox.Show(this, ex.Message, "분할 실패"); }
     }

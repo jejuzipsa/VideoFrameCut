@@ -3,6 +3,9 @@ using VideoFrameCut.Core;
 var cases = new (string Name, Action Test)[]
 {
     ("211 seconds / 25 second segments (CFR)", Test211Seconds),
+    ("time splitting targets A only (60 sec + 26 sec)", TestTargetedSplitAOnly),
+    ("time split unchecked and selected segments remain unchanged", TestTargetedSplitSelection),
+    ("targeted time splitting supports nonconsecutive clips", TestTargetedSplitNonconsecutive),
     ("frame boundary snaps, no overlap and no omissions", TestFullCoverage),
     ("VFR uses actual PTS and not average FPS", TestVariableFrameRate),
     ("deleted gaps and manual cuts remain separate", TestDeletedGaps),
@@ -37,6 +40,77 @@ return failed == 0 ? 0 : 1;
 static void Assert(bool value, string reason)
 {
     if (!value) throw new Exception(reason);
+}
+
+static void TestTargetedSplitAOnly()
+{
+    // A: 60 seconds; B: 26 seconds. Only A was marked for time splitting.
+    var index = DisplayFrameIndex.FromConstantFrameRate(86 * 30, 30);
+    var editor = new ClipEditor(index);
+    Assert(editor.SplitAt(60 * 30), "A/B boundary expected.");
+    var originals = editor.Segments.ToArray();
+    var a = originals[0];
+    var b = originals[1];
+    // Export is deliberately still enabled for both; splitting must not
+    // use the existing output checkbox to decide what to edit.
+    Assert(a.ExportEnabled && b.ExportEnabled, "Both clips should be export-enabled.");
+
+    Assert(editor.SplitByTime(25, new[] { a.Id }), "A should be split into three clips.");
+    var result = editor.Segments.ToArray();
+    var expected = new[] { 25 * 30, 25 * 30, 10 * 30, 26 * 30 };
+    Assert(result.Select(s => s.SourceRange.Count).SequenceEqual(expected),
+        "Expected [A25, A25, A10, B26], actual " +
+        string.Join(",", result.Select(s => s.SourceRange.Count)));
+    Assert(result[3] == b, "B must be identical to its pre-split record, including ID and export flag.");
+    Assert(result[0].Id == a.Id, "A's first piece should keep the original ID.");
+    Assert(result.All(s => s.ExportEnabled), "Export checkboxes must remain unchanged.");
+    Assert(result.Sum(s => s.SourceRange.Count) == index.FrameCount,
+        "Original frame counts must be conserved without loss or duplication.");
+    Assert(editor.Undo() && editor.Segments.SequenceEqual(originals),
+        "One undo must restore A and untouched B.");
+    Assert(editor.Redo() && editor.Segments.SequenceEqual(result),
+        "Redo should restore precisely the same A-only split.");
+}
+
+static void TestTargetedSplitSelection()
+{
+    var editor = new ClipEditor(DisplayFrameIndex.FromConstantFrameRate(86 * 30, 30));
+    Assert(editor.SplitAt(60 * 30), "A/B boundary expected.");
+    var original = editor.Segments.ToArray();
+    Assert(!editor.SplitByTime(25, Array.Empty<Guid>()),
+        "No selected target must never split the full video.");
+    Assert(!editor.SplitByTime(25, new[] { Guid.NewGuid() }),
+        "Unknown target IDs must not alter the edit list.");
+    Assert(editor.Segments.SequenceEqual(original), "Unselected clips changed.");
+    Assert(!editor.SplitByTime(30, new[] { original[1].Id }),
+        "B is shorter than the target split interval.");
+    Assert(editor.Segments.SequenceEqual(original), "Short B was modified.");
+    Assert(editor.SetExportEnabled(new[] { original[0].Id }, false),
+        "Output toggle should work independently.");
+    var aDisabled = editor.Segments[0];
+    Assert(editor.SplitByTime(25, new[] { aDisabled.Id }),
+        "Splitting should be possible even when exporting A is disabled.");
+    Assert(editor.Segments.Take(3).All(s => !s.ExportEnabled),
+        "Child clips must inherit A's export state.");
+    Assert(editor.Segments[^1] == original[1],
+        "Export-enabled B must remain exactly unchanged.");
+}
+
+static void TestTargetedSplitNonconsecutive()
+{
+    // Split the first and third clips only; the 60-second middle clip is unmodified.
+    var editor = new ClipEditor(DisplayFrameIndex.FromConstantFrameRate(140 * 30, 30));
+    Assert(editor.SplitAt(40 * 30) && editor.SplitAt(100 * 30),
+        "Expected three clips: 40, 60 and 40 seconds.");
+    var originals = editor.Segments.ToArray();
+    Assert(editor.SplitByTime(25, new[] { originals[2].Id, originals[0].Id }),
+        "Nonconsecutive checked clips should split independently.");
+    var after = editor.Segments.ToArray();
+    Assert(after.Select(s => s.SourceRange.Count).SequenceEqual(
+        new[] { 25 * 30, 15 * 30, 60 * 30, 25 * 30, 15 * 30 }),
+        "Only selected outer segments should be divided.");
+    Assert(after[2] == originals[1], "Unselected middle clip mutated.");
+    Assert(after.Sum(s => s.SourceRange.Count) == 140 * 30, "Source frame coverage was lost.");
 }
 
 static void Test211Seconds()

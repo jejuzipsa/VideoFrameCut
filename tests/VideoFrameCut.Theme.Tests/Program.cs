@@ -83,8 +83,8 @@ internal static class Program
                 throw new Exception("Merge UI dark style and list binding are not loaded.");
             if (window.FindName("ClipGrid") is not DataGrid grid)
                 throw new Exception("ClipGrid was not initialized.");
-            if (grid.Columns.Count != 7)
-                throw new Exception("Expected all seven segment columns.");
+            if (grid.Columns.Count != 8)
+                throw new Exception("Expected eight segment columns including independent split target.");
 
             AssertResource<Style>(window, "DarkDataGridHeaderStyle");
             AssertResource<Style>(window, "DarkDataGridCellStyle");
@@ -96,9 +96,14 @@ internal static class Program
                 throw new Exception("DataGrid dark styles were not applied.");
             if (grid.Columns.OfType<DataGridTextColumn>().Any(c => c.ElementStyle is null))
                 throw new Exception("One or more grid text columns have no dark foreground style.");
-            var checkColumn = grid.Columns.OfType<DataGridCheckBoxColumn>().Single();
-            if (checkColumn.ElementStyle is null || checkColumn.EditingElementStyle is null)
-                throw new Exception("Checkbox column needs both display and edit dark styles.");
+            var checkColumns = grid.Columns.OfType<DataGridCheckBoxColumn>().ToArray();
+            if (checkColumns.Length != 2 ||
+                checkColumns[0].Header?.ToString() != "출력" ||
+                checkColumns[1].Header?.ToString() != "분할")
+                throw new Exception("Export and split target checkboxes must be separate.");
+            if (checkColumns.Any(column =>
+                column.ElementStyle is null || column.EditingElementStyle is null))
+                throw new Exception("Both checkbox columns need dark display and edit styles.");
 
             var header = new DataGridColumnHeader
             {

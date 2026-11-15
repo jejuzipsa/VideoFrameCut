@@ -180,7 +180,9 @@
             <StackPanel Grid.Column="2">
                 <GroupBox x:Name="EditingGroupBox" Header="편집">
                     <StackPanel>
-                        <TextBlock Text="자동 분할 간격(초)" Margin="0,0,0,6"/>
+                        <TextBlock Text="자동 분할 간격(초) · 분할 체크한 구간만" Margin="0,0,0,6"
+                                   TextWrapping="Wrap"
+                                   ToolTip="아래 구간 목록의 '분할' 열을 체크하세요. 체크가 없으면 선택한 행만 나눕니다."/>
                         <DockPanel>
                             <Button Content="시간으로 나누기" DockPanel.Dock="Right" Click="AutoSplit_Click"
                                     Margin="8,0,0,0"/>
@@ -245,7 +247,7 @@
                 <ColumnDefinition Width="2.05*"/>
                 <ColumnDefinition Width="1*"/>
             </Grid.ColumnDefinitions>
-            <GroupBox x:Name="ClipsGroupBox" Grid.Column="0" Header="② 분할 구간 목록 (Ctrl/Shift로 여러 개 선택)">
+            <GroupBox x:Name="ClipsGroupBox" Grid.Column="0" Header="② 분할 구간 목록 (분할 대상 체크 / Ctrl·Shift 다중 선택)">
             <DataGrid x:Name="ClipGrid" AutoGenerateColumns="False" CanUserAddRows="False"
                       SelectionMode="Extended" SelectionUnit="FullRow" IsReadOnly="False"
                       SelectionChanged="ClipGrid_SelectionChanged"
@@ -257,6 +259,10 @@
                         ElementStyle="{StaticResource DarkGridCheckBoxStyle}"
                         EditingElementStyle="{StaticResource DarkGridCheckBoxStyle}"
                         Binding="{Binding ExportEnabled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                    <DataGridCheckBoxColumn Header="분할" Width="68"
+                        ElementStyle="{StaticResource DarkGridCheckBoxStyle}"
+                        EditingElementStyle="{StaticResource DarkGridCheckBoxStyle}"
+                        Binding="{Binding SplitTarget, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                     <DataGridTextColumn Header="#" Width="50" IsReadOnly="True"
                         ElementStyle="{StaticResource DarkDataGridTextStyle}" Binding="{Binding Number}"/>
                     <DataGridTextColumn Header="시작 시간" Width="135" IsReadOnly="True"
