@@ -50,7 +50,7 @@ def make_frame(path: Path, number: int) -> None:
 def decode_frame_numbers(path: Path) -> list[int]:
     raw = run(
         "ffmpeg", "-v", "error", "-i", str(path),
-        "-map", "0:v:0", "-f", "rawvideo", "-pix_fmt", "gray", "-"
+        "-map", "0:v:0", "-fps_mode:v", "passthrough", "-f", "rawvideo", "-pix_fmt", "gray", "-"
     )
     frame_size = WIDTH * HEIGHT
     assert len(raw) % frame_size == 0, f"Unexpected raw size: {path}"
@@ -148,6 +148,55 @@ def main() -> None:
         assert_frames(selection_dir / "source_002.mp4", list(range(48, 72)))
         assert not (selection_dir / "source_003.mp4").exists()
 
+        # Near-CFR drift regression: each adjacent interval is within the
+        # old CFR tolerance, but cumulative drift made -r/-fps_mode cfr
+        # duplicate a selected frame. Keep frame identities AND source PTS.
+        drift_count = 300
+        for frame in range(FRAME_COUNT, drift_count):
+            make_frame(pictures / f"frame_{frame:04}.ppm", frame)
+        drift_source = home / "drift.mp4"
+        run(
+            "ffmpeg", "-nostdin", "-v", "error",
+            "-framerate", str(FPS), "-start_number", "0",
+            "-i", str(pictures / "frame_%04d.ppm"), "-frames:v", str(drift_count),
+            "-vf", "settb=1/1000000,setpts='N*1000000/24+min(N,150)*500-max(N-150,0)*500'",
+            "-c:v", "libx264", "-crf", "12", "-bf:v", "0",
+            "-pix_fmt", "yuv420p", "-enc_time_base:v", "1:90000",
+            "-video_track_timescale", "90000", "-fps_mode:v", "passthrough",
+            "-bsf:v", r"setts=duration=if(eq(N\,299)\,3750\,DURATION)",
+            "-y", str(drift_source)
+        )
+        assert_frames(drift_source, list(range(drift_count)))
+        drift_pts = frame_pts(drift_source)
+        assert len(drift_pts) == drift_count
+        assert drift_pts[149] - 149 / FPS > 0.06
+        for start, end in [(0, 150), (150, 299), (149, 150)]:
+            folder = home / f"drift_{start}_{end}"
+            run(
+                "dotnet", "run", "--no-build", "--configuration", "Release",
+                "--project", str(CLI), "--", "extract", str(drift_source),
+                "--start-frame", str(start), "--end-frame", str(end),
+                "--out", str(folder), "--cpu", "--no-audio"
+            )
+            clip = folder / "drift_001.mp4"
+            assert_frames(clip, list(range(start, end)))
+            actual_pts = frame_pts(clip)
+            expected_pts = [p - drift_pts[start] for p in drift_pts[start:end]]
+            assert len(actual_pts) == len(expected_pts)
+            assert all(abs(a - e) < 0.00005 for a, e in zip(actual_pts, expected_pts)), (
+                f"Source timestamp drift: {start}:{end}"
+            )
+            duration = float(run(
+                "ffprobe", "-v", "error", "-select_streams", "v:0",
+                "-show_entries", "stream=duration", "-of", "csv=p=0", str(clip)
+            ).decode().strip())
+            assert abs(duration - (drift_pts[end] - drift_pts[start])) < 0.00005, (
+                f"Final sample duration mismatch: {start}:{end}, {duration}"
+            )
+
+        for frame in range(FRAME_COUNT, drift_count):
+            (pictures / f"frame_{frame:04}.ppm").unlink()
+
         # Real H.264 GOP with B-frames; extract begins between keyframes.
         # Includes audio to exercise the optional audio trim/transcode path.
         h264_source = home / "h264_source.mp4"
@@ -157,6 +206,7 @@ def main() -> None:
             "-i", str(pictures / "frame_%04d.ppm"),
             "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=3.2",
             "-map", "0:v:0", "-map", "1:a:0",
+            "-frames:v", str(FRAME_COUNT),
             "-c:v", "libx264", "-g", "48", "-keyint_min", "48", "-bf", "2",
             "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", "-y", str(h264_source)
         )
@@ -224,7 +274,8 @@ def main() -> None:
 
     print("PASS CFR: 4 segments, exact nonkeyframe extraction and selection")
     print("PASS H.264 B-frames: nonkeyframe 44-frame output, original audio retained")
-    print("NOTE VFR: core PTS/split unit tests only; export integration pending a portable VFR fixture")
+    print("PASS near-CFR timestamp drift: exact frame identity, relative PTS and final sample duration")
+    print("NOTE VFR: near-CFR drift covered; broader real-world VFR export verification remains pending")
     print("PASS unique frame identity: no missing, repeated or reordered source frames")
     print("PASS codec compatibility: generated AV1/Opus MP4 receives native H.264/AAC preview")
     print("PASS cross-source merging: cut, crossfade, fade-through-black, silent clips and mismatch resolution/FPS")

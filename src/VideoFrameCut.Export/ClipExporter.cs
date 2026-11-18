@@ -60,6 +60,10 @@ public sealed class ClipExporter
                 try
                 {
                     await EncodeAsync(source, index, clip.SourceRange, pending, settings, encoder, cancellation);
+                    progress?.Report(new ExportProgress(i, selected.Length, name, "Decoding output for verification"));
+                    measured = await Probe.CountDecodedFramesAsync(pending, cancellation);
+                    if (measured != expected)
+                        throw new InvalidDataException($"Expected {expected} decoded frames; got {measured}.");
                 }
                 catch (OperationCanceledException) { throw; }
                 catch (Exception ex) when (settings.Encoding == EncodingMode.Auto && encoder == "h264_nvenc")
@@ -68,14 +72,16 @@ public sealed class ClipExporter
                         ex, $"원본: {source.Path}\n구간: {name}");
                     DeleteTemporary(pending);
                     encoder = "libx264";
-                    progress?.Report(new ExportProgress(i, selected.Length, name, "NVENC failed; retrying with CPU"));
+                    measured = null;
+                    progress?.Report(new ExportProgress(i, selected.Length, name, "NVENC encoding or verification failed; retrying with CPU"));
                     await EncodeAsync(source, index, clip.SourceRange, pending, settings, encoder, cancellation);
+                    progress?.Report(new ExportProgress(i, selected.Length, name, "Decoding output for verification"));
+                    measured = await Probe.CountDecodedFramesAsync(pending, cancellation);
+                    if (measured != expected)
+                        throw new InvalidDataException($"Expected {expected} decoded frames; got {measured}.");
                 }
 
-                progress?.Report(new ExportProgress(i, selected.Length, name, "Decoding output for verification"));
-                measured = await Probe.CountDecodedFramesAsync(pending, cancellation);
-                if (measured != expected)
-                    throw new InvalidDataException($"Expected {expected} decoded frames; got {measured}.");
+                cancellation.ThrowIfCancellationRequested();
                 File.Move(pending, output, overwrite: false);
                 succeeded = true;
             }
@@ -113,9 +119,12 @@ public sealed class ClipExporter
         var from = index.BoundaryTime(range.Start).ToString("R", fmt);
         var to = index.BoundaryTime(range.End).ToString("R", fmt);
         var withAudio = settings.KeepAudio && source.HasAudio;
-        var cfr = IsConstantRate(index, source.NominalFramesPerSecond);
-        var stripFps = !cfr && await SupportsStripFpsAsync(cancellation) ? ":strip_fps=1" : "";
-        var filter = $"[0:v:0]select='gte(n,{range.Start})*lt(n,{range.End})',setpts=PTS-STARTPTS{stripFps}[v]";
+        // Select by decoded frame index, not by average FPS. Even a stream
+        // whose adjacent PTS intervals look constant can accumulate drift.
+        // Do not let FFmpeg's CFR/VFR synchronizer add or discard frames.
+        var finalFrameDuration = (index.BoundaryTime(range.End) -
+            index.BoundaryTime(range.End - 1)).ToString("R", fmt);
+        var filter = $"[0:v:0]select='gte(n,{range.Start})*lt(n,{range.End})',setpts=PTS-STARTPTS[v]";
         if (withAudio) filter += $";[0:a:0]atrim=start={from}:end={to},asetpts=PTS-STARTPTS[a]";
 
         var args = new List<string> {
@@ -126,22 +135,16 @@ public sealed class ClipExporter
         if (withAudio) args.AddRange(new[] { "-map", "[a]", "-c:a", "aac", "-b:a", "192k" });
         else args.Add("-an");
 
-        // CFR requires an explicit output frame rate to give the final MP4 sample
-        // a nonzero duration. With VFR, passthrough preserves original PTS gaps.
-        if (cfr)
-        {
-            args.AddRange(new[] { "-r", source.NominalFramesPerSecond!.Value.ToString("0.########", fmt),
-                "-fps_mode:v", "cfr" });
-        }
-        else
-        {
-            args.AddRange(new[] { "-fps_mode:v", "vfr", "-use_editlist", "0" });
-        }
-        args.AddRange(new[] { "-c:v", encoder });
-        // Without an MP4 edit list, B-frame decoder reordering can shift the
-        // first VFR presentation timestamp away from zero. Disable B-frames on
-        // VFR output to keep the first displayed frame at PTS 0.
-        if (!cfr) args.AddRange(new[] { "-bf:v", "0" });
+        // Preserve the filter time base and every selected frame. Disable
+        // output B-frame reordering so packet N identifies display frame N.
+        // The MP4 muxer may otherwise give the last sample zero duration
+        // (and hide it via the edit list). Set that packet's duration from
+        // the actual source boundary, including a one-frame selection.
+        // Keep normal MP4 edit lists for the AAC priming delay.
+        var lastPacket = (range.Count - 1).ToString(fmt);
+        var packetDuration = $"setts=duration=if(eq(N\\,{lastPacket})\\,max(1\\,round({finalFrameDuration}/TB))\\,DURATION)";
+        args.AddRange(new[] { "-fps_mode:v", "passthrough", "-enc_time_base:v", "filter",
+            "-c:v", encoder, "-bf:v", "0", "-bsf:v", packetDuration });
         if (encoder == "h264_nvenc")
             args.AddRange(new[] { "-preset", "p5", "-rc:v", "vbr", "-cq:v", settings.Quality.ToString(fmt), "-b:v", "0" });
         else
@@ -149,28 +152,6 @@ public sealed class ClipExporter
         args.AddRange(new[] { "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-y", path });
 
         await FfProcess.CaptureAsync(FfmpegPath, args, cancellation);
-    }
-
-    private async Task<bool> SupportsStripFpsAsync(CancellationToken cancellation)
-    {
-        var version = await FfProcess.CaptureAsync(FfmpegPath, new[] { "-version" }, cancellation);
-        var match = System.Text.RegularExpressions.Regex.Match(version,
-            @"ffmpeg version (?:n)?(\d+)");
-        return match.Success && int.TryParse(match.Groups[1].Value, out var major) && major >= 8;
-    }
-
-    private static bool IsConstantRate(DisplayFrameIndex index, double? nominalFps)
-    {
-        if (nominalFps is not > 0) return false;
-        if (index.FrameCount == 1) return true;
-        var expected = 1.0 / nominalFps.Value;
-        var tolerance = Math.Max(0.0012, expected * 0.025);
-        for (var i = 1; i < index.FrameCount; i++)
-        {
-            if (Math.Abs(index.BoundaryTime(i) - index.BoundaryTime(i - 1) - expected) > tolerance)
-                return false;
-        }
-        return true;
     }
 
     private static void Validate(DisplayFrameIndex index, IReadOnlyList<EditSegment> clips)
